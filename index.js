@@ -6,7 +6,7 @@ const multer = require('multer');
 const AWS = require('aws-sdk');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const { Configuration, OpenAIApi } = require('openai');
+const { OpenAI } = require('openai'); // Updated import for OpenAI v4.x.x
 
 dotenv.config();
 const app = express();
@@ -22,9 +22,8 @@ const s3 = new AWS.S3({
   region: process.env.AWS_REGION,
 });
 
-// OpenAI Setup
-const configuration = new Configuration({ apiKey: process.env.OPENAI_API_KEY });
-const openai = new OpenAIApi(configuration);
+// OpenAI Setup (updated for v4.x.x)
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // Models
 const UserSchema = new mongoose.Schema({
@@ -179,11 +178,11 @@ app.post('/api/contact', auth, async (req, res) => {
 
 app.post('/api/chat', auth, async (req, res) => {
   const { message } = req.body;
-  const reply = await openai.createCompletion({
+  const reply = await openai.completions.create({
     model: "text-davinci-003",
     prompt: `You are an assistant for Wilcox Advisors, a financial services provider for small businesses. Respond to: "${message}" with a concise answer relevant to our services (Bookkeeping, Monthly Financial Package, Cash Flow Management, Custom Reporting, Budgeting & Forecasting, Outsourced Controller/CFO Services), avoiding free detailed advice. Encourage a consultation if needed.`,
     max_tokens: 100,
-  }).then(res => res.data.choices[0].text.trim());
+  }).then(res => res.choices[0].text.trim());
   const chat = new Chat({ message, reply, userId: req.user?.id, isClientChat: false });
   await chat.save();
   res.json({ reply });
@@ -191,11 +190,11 @@ app.post('/api/chat', auth, async (req, res) => {
 
 app.post('/api/client/chat', auth, async (req, res) => {
   const { message } = req.body;
-  const reply = await openai.createCompletion({
+  const reply = await openai.completions.create({
     model: "text-davinci-003",
     prompt: `You are an assistant for Wilcox Advisors, a financial services provider for small businesses. Respond to: "${message}" with a concise answer relevant to our services (Bookkeeping, Monthly Financial Package, Cash Flow Management, Custom Reporting, Budgeting & Forecasting, Outsourced Controller/CFO Services). Avoid giving free detailed advice; suggest a consultation for specifics.`,
     max_tokens: 100,
-  }).then(res => res.data.choices[0].text.trim());
+  }).then(res => res.choices[0].text.trim());
   const chat = new Chat({ message, reply, userId: req.user.id, isClientChat: true });
   await chat.save();
   res.json({ reply });
@@ -232,11 +231,11 @@ app.get('/api/admin/dashboard', adminAuth, async (req, res) => {
   const files = await File.find();
 
   const trends = `Latest trends: High interest in ${consultations.map(c => c.services).flat().reduce((acc, curr) => { acc[curr] = (acc[curr] || 0) + 1; return acc; }, {})} Customer questions: ${chats.map(c => c.message).join(', ')}.`;
-  const blogDraft = await openai.createCompletion({
+  const blogDraft = await openai.completions.create({
     model: "text-davinci-003",
     prompt: `Generate a blog post draft for Wilcox Advisors, focusing on our services (Bookkeeping, Monthly Financial Package, Cash Flow Management, Custom Reporting, Budgeting & Forecasting, Outsourced Controller/CFO Services) based on: ${trends}. Keep it relevant to our business and customer questions.`,
     max_tokens: 500,
-  }).then(res => ({ title: `Latest Financial Insights for Your Business`, content: res.data.choices[0].text.trim() }));
+  }).then(res => ({ title: `Latest Financial Insights for Your Business`, content: res.choices[0].text.trim() }));
 
   const heroContent = await Content.findOne({ section: 'hero' }) || { section: 'hero', value: { headline: "Financial Solutions for Small Businesses", subtext: "Wilcox Advisors helps small businesses like yours grow smarter with tailored financial expertise." } };
   const aboutContent = await Content.findOne({ section: 'about' }) || { section: 'about', value: "At Wilcox Advisors, we specialize in financial solutions for small businesses. From startups to growing companies, we provide the expertise you need to succeed—built to scale with you every step of the way." };
