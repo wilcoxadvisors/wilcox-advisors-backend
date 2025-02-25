@@ -6,23 +6,26 @@ const multer = require('multer');
 const AWS = require('aws-sdk');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const { OpenAI } = require('openai'); // Updated import for OpenAI v4.x.x
+const { OpenAI } = require('openai');
 
 dotenv.config();
 const app = express();
-app.use(cors());
+
+// Middleware
+app.use(cors({ origin: process.env.ALLOWED_ORIGIN }));
 app.use(express.json());
 
-mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
+// MongoDB Connection
+mongoose.connect(process.env.MONGO_URI);
 
-// AWS S3 Setup
+// AWS S3 Configuration
 const s3 = new AWS.S3({
-  accessKeyId: process.env.AWS_ACCESS_KEY,
-  secretAccessKey: process.env.AWS_SECRET_KEY,
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   region: process.env.AWS_REGION,
 });
 
-// OpenAI Setup (updated for v4.x.x)
+// OpenAI Configuration
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // Models
@@ -102,7 +105,7 @@ const ContentSchema = new mongoose.Schema({
 });
 const Content = mongoose.model('Content', ContentSchema);
 
-// Middleware
+// Authentication Middleware
 const auth = (req, res, next) => {
   const token = req.headers['authorization']?.split(' ')[1];
   if (!token && req.method !== 'POST') return res.status(401).json({ message: 'Unauthorized' });
@@ -131,73 +134,117 @@ const adminAuth = async (req, res, next) => {
   }
 };
 
+// Multer Setup for File Uploads
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 // Routes
 app.post('/api/signup', async (req, res) => {
   const { email, password } = req.body;
-  const hashedPassword = await bcrypt.hash(password, 10);
   try {
+    const hashedPassword = await bcrypt.hash(password, 10);
     const user = new User({ email, password: hashedPassword });
     await user.save();
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
     res.json({ token });
   } catch (error) {
+    console.error('Signup error:', error);
     res.status(400).json({ message: 'Signup failed' });
   }
 });
 
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
-  const user = await User.findOne({ email });
-  if (!user || !await bcrypt.compare(password, user.password)) {
-    return res.status(401).json({ message: 'Invalid credentials' });
+  try {
+    const user = await User.findOne({ email });
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+    const token = jwt.sign({ id: user._id, isAdmin: user.isAdmin }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    res.json({ token, isAdmin: user.isAdmin });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ message: 'Login failed' });
   }
-  const token = jwt.sign({ id: user._id, isAdmin: user.isAdmin }, process.env.JWT_SECRET, { expiresIn: '1h' });
-  res.json({ token, isAdmin: user.isAdmin });
 });
 
 app.post('/api/consultation', auth, async (req, res) => {
-  const consultation = new Consultation({ ...req.body, userId: req.user?.id });
-  await consultation.save();
-  res.status(201).json({ message: 'Consultation submitted' });
+  try {
+    const consultation = new Consultation({ ...req.body, userId: req.user?.id });
+    await consultation.save();
+    res.status(201).json({ message: 'Consultation submitted' });
+  } catch (error) {
+    console.error('Consultation submission error:', error);
+    res.status(500).json({ message: 'Failed to submit consultation' });
+  }
 });
 
 app.post('/api/checklist', auth, async (req, res) => {
-  const checklist = new Checklist({ ...req.body, userId: req.user?.id });
-  await checklist.save();
-  res.status(201).json({ message: 'Checklist request submitted' });
+  try {
+    const checklist = new Checklist({ ...req.body, userId: req.user?.id });
+    await checklist.save();
+    res.status(201).json({ message: 'Checklist request submitted' });
+  } catch (error) {
+    console.error('Checklist submission error:', error);
+    res.status(500).json({ message: 'Failed to submit checklist request' });
+  }
 });
 
 app.post('/api/contact', auth, async (req, res) => {
-  const contact = new Contact({ ...req.body, userId: req.user?.id });
-  await contact.save();
-  res.status(201).json({ message: 'Contact form submitted' });
+  try {
+    const contact = new Contact({ ...req.body, userId: req.user?.id });
+    await contact.save();
+    res.status(201).json({ message: 'Contact form submitted' });
+  } catch (error) {
+    console.error('Contact form submission error:', error);
+    res.status(500).json({ message: 'Failed to submit contact form' });
+  }
 });
 
 app.post('/api/chat', auth, async (req, res) => {
   const { message } = req.body;
-  const reply = await openai.completions.create({
-    model: "text-davinci-003",
-    prompt: `You are an assistant for Wilcox Advisors, a financial services provider for small businesses. Respond to: "${message}" with a concise answer relevant to our services (Bookkeeping, Monthly Financial Package, Cash Flow Management, Custom Reporting, Budgeting & Forecasting, Outsourced Controller/CFO Services), avoiding free detailed advice. Encourage a consultation if needed.`,
-    max_tokens: 100,
-  }).then(res => res.choices[0].text.trim());
-  const chat = new Chat({ message, reply, userId: req.user?.id, isClientChat: false });
-  await chat.save();
-  res.json({ reply });
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [
+        {
+          role: 'user',
+          content: `You are an assistant for Wilcox Advisors, a financial services provider for small businesses. Respond to: "${message}" with a concise answer relevant to our services (Bookkeeping, Monthly Financial Package, Cash Flow Management, Custom Reporting, Budgeting & Forecasting, Outsourced Controller/CFO Services), avoiding free detailed advice. Encourage a consultation if needed.`,
+        },
+      ],
+      max_tokens: 100,
+    });
+    const reply = completion.choices[0].message.content.trim();
+    const chat = new Chat({ message, reply, userId: req.user?.id, isClientChat: false });
+    await chat.save();
+    res.json({ reply });
+  } catch (error) {
+    console.error('OpenAI API error in /api/chat:', error);
+    res.status(500).json({ message: 'Failed to get response from AI' });
+  }
 });
 
 app.post('/api/client/chat', auth, async (req, res) => {
   const { message } = req.body;
-  const reply = await openai.completions.create({
-    model: "text-davinci-003",
-    prompt: `You are an assistant for Wilcox Advisors, a financial services provider for small businesses. Respond to: "${message}" with a concise answer relevant to our services (Bookkeeping, Monthly Financial Package, Cash Flow Management, Custom Reporting, Budgeting & Forecasting, Outsourced Controller/CFO Services). Avoid giving free detailed advice; suggest a consultation for specifics.`,
-    max_tokens: 100,
-  }).then(res => res.choices[0].text.trim());
-  const chat = new Chat({ message, reply, userId: req.user.id, isClientChat: true });
-  await chat.save();
-  res.json({ reply });
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [
+        {
+          role: 'user',
+          content: `You are an assistant for Wilcox Advisors, a financial services provider for small businesses. Respond to: "${message}" with a concise answer relevant to our services (Bookkeeping, Monthly Financial Package, Cash Flow Management, Custom Reporting, Budgeting & Forecasting, Outsourced Controller/CFO Services). Avoid giving free detailed advice; suggest a consultation for specifics.`,
+        },
+      ],
+      max_tokens: 100,
+    });
+    const reply = completion.choices[0].message.content.trim();
+    const chat = new Chat({ message, reply, userId: req.user.id, isClientChat: true });
+    await chat.save();
+    res.json({ reply });
+  } catch (error) {
+    console.error('OpenAI API error in /api/client/chat:', error);
+    res.status(500).json({ message: 'Failed to get response from AI' });
+  }
 });
 
 app.post('/api/upload', auth, upload.single('file'), async (req, res) => {
@@ -206,67 +253,110 @@ app.post('/api/upload', auth, upload.single('file'), async (req, res) => {
     Key: `${req.user.id}/${Date.now()}-${req.file.originalname}`,
     Body: req.file.buffer,
   };
-  const result = await s3.upload(params).promise();
-  const file = new File({ userId: req.user.id, fileName: req.file.originalname, s3Key: result.Key });
-  await file.save();
-  res.status(201).json({ message: 'File uploaded' });
+  try {
+    const result = await s3.upload(params).promise();
+    const file = new File({ userId: req.user.id, fileName: req.file.originalname, s3Key: result.Key });
+    await file.save();
+    res.status(201).json({ message: 'File uploaded' });
+  } catch (error) {
+    console.error('S3 upload error:', error);
+    res.status(500).json({ message: 'File upload failed' });
+  }
 });
 
 app.get('/api/client/dashboard', auth, async (req, res) => {
-  const clientChat = await Chat.find({ userId: req.user.id, isClientChat: true });
-  res.json({
-    financials: { profitLoss: { revenue: 50000, expenses: 30000, netIncome: 20000 }, balanceSheet: { assets: 100000, liabilities: 40000, equity: 60000 } },
-    cashFlow: { labels: ['Jan', 'Feb', 'Mar'], data: [10000, 15000, 12000] },
-    reports: ['Sales by Category', 'Expense Breakdown'],
-    gl: [{ date: '2025-02-01', description: 'Sales', amount: 5000 }],
-    clientChat,
-  });
+  try {
+    const clientChat = await Chat.find({ userId: req.user.id, isClientChat: true });
+    res.json({
+      financials: { profitLoss: { revenue: 50000, expenses: 30000, netIncome: 20000 }, balanceSheet: { assets: 100000, liabilities: 40000, equity: 60000 } },
+      cashFlow: { labels: ['Jan', 'Feb', 'Mar'], data: [10000, 15000, 12000] },
+      reports: ['Sales by Category', 'Expense Breakdown'],
+      gl: [{ date: '2025-02-01', description: 'Sales', amount: 5000 }],
+      clientChat,
+    });
+  } catch (error) {
+    console.error('Error fetching client dashboard:', error);
+    res.status(500).json({ message: 'Failed to load dashboard data' });
+  }
 });
 
 app.get('/api/admin/dashboard', adminAuth, async (req, res) => {
-  const consultations = await Consultation.find();
-  const checklists = await Checklist.find();
-  const contacts = await Contact.find();
-  const chats = await Chat.find();
-  const files = await File.find();
+  try {
+    const consultations = await Consultation.find();
+    const checklists = await Checklist.find();
+    const contacts = await Contact.find();
+    const chats = await Chat.find();
+    const files = await File.find();
 
-  const trends = `Latest trends: High interest in ${consultations.map(c => c.services).flat().reduce((acc, curr) => { acc[curr] = (acc[curr] || 0) + 1; return acc; }, {})} Customer questions: ${chats.map(c => c.message).join(', ')}.`;
-  const blogDraft = await openai.completions.create({
-    model: "text-davinci-003",
-    prompt: `Generate a blog post draft for Wilcox Advisors, focusing on our services (Bookkeeping, Monthly Financial Package, Cash Flow Management, Custom Reporting, Budgeting & Forecasting, Outsourced Controller/CFO Services) based on: ${trends}. Keep it relevant to our business and customer questions.`,
-    max_tokens: 500,
-  }).then(res => ({ title: `Latest Financial Insights for Your Business`, content: res.choices[0].text.trim() }));
+    const trends = `Latest trends: High interest in ${consultations.map(c => c.services).flat().reduce((acc, curr) => { acc[curr] = (acc[curr] || 0) + 1; return acc; }, {})} Customer questions: ${chats.map(c => c.message).join(', ')}.`;
+    const blogDraft = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [
+        {
+          role: 'user',
+          content: `Generate a blog post draft for Wilcox Advisors, focusing on our services (Bookkeeping, Monthly Financial Package, Cash Flow Management, Custom Reporting, Budgeting & Forecasting, Outsourced Controller/CFO Services) based on: ${trends}. Keep it relevant to our business and customer questions.`,
+        },
+      ],
+      max_tokens: 500,
+    }).then(res => ({ title: 'Latest Financial Insights for Your Business', content: res.choices[0].message.content.trim() }));
 
-  const heroContent = await Content.findOne({ section: 'hero' }) || { section: 'hero', value: { headline: "Financial Solutions for Small Businesses", subtext: "Wilcox Advisors helps small businesses like yours grow smarter with tailored financial expertise." } };
-  const aboutContent = await Content.findOne({ section: 'about' }) || { section: 'about', value: "At Wilcox Advisors, we specialize in financial solutions for small businesses. From startups to growing companies, we provide the expertise you need to succeed—built to scale with you every step of the way." };
+    const heroContent = (await Content.findOne({ section: 'hero' })) || { section: 'hero', value: { headline: 'Financial Solutions for Small Businesses', subtext: 'Wilcox Advisors helps small businesses like yours grow smarter with tailored financial expertise.' } };
+    const aboutContent = (await Content.findOne({ section: 'about' })) || { section: 'about', value: 'At Wilcox Advisors, we specialize in financial solutions for small businesses. From startups to growing companies, we provide the expertise you need to succeed—built to scale with you every step of the way.' };
 
-  res.json({
-    blogDrafts: [blogDraft],
-    hero: heroContent.value,
-    about: aboutContent.value,
-  });
+    res.json({
+      blogDrafts: [blogDraft],
+      hero: heroContent.value,
+      about: aboutContent.value,
+    });
+  } catch (error) {
+    console.error('Error fetching admin dashboard:', error);
+    res.status(500).json({ message: 'Failed to load admin dashboard' });
+  }
 });
 
 app.post('/api/admin/content', adminAuth, async (req, res) => {
   const { section, value } = req.body;
-  await Content.findOneAndUpdate({ section }, { section, value }, { upsert: true });
-  res.json({ message: 'Content updated' });
+  try {
+    await Content.findOneAndUpdate({ section }, { section, value }, { upsert: true });
+    res.json({ message: 'Content updated' });
+  } catch (error) {
+    console.error('Error updating content:', error);
+    res.status(500).json({ message: 'Failed to update content' });
+  }
 });
 
 app.get('/api/blog', async (req, res) => {
-  const posts = await Blog.find({ isDraft: false });
-  res.json(posts);
+  try {
+    const posts = await Blog.find({ isDraft: false });
+    res.json(posts);
+  } catch (error) {
+    console.error('Error fetching blog posts:', error);
+    res.status(500).json({ message: 'Failed to load blog posts' });
+  }
 });
 
 app.post('/api/blog', adminAuth, async (req, res) => {
-  const blog = new Blog({ ...req.body, isDraft: false });
-  await blog.save();
-  res.status(201).json({ message: 'Blog posted' });
+  try {
+    const blog = new Blog({ ...req.body, isDraft: false });
+    await blog.save();
+    res.status(201).json({ message: 'Blog posted' });
+  } catch (error) {
+    console.error('Error posting blog:', error);
+    res.status(500).json({ message: 'Failed to post blog' });
+  }
 });
 
 app.put('/api/blog/:id', adminAuth, async (req, res) => {
-  await Blog.findByIdAndUpdate(req.params.id, { ...req.body, isDraft: false });
-  res.json({ message: 'Blog updated' });
+  try {
+    await Blog.findByIdAndUpdate(req.params.id, { ...req.body, isDraft: false });
+    res.json({ message: 'Blog updated' });
+  } catch (error) {
+    console.error('Error updating blog:', error);
+    res.status(500).json({ message: 'Failed to update blog' });
+  }
 });
 
-app.listen(5000, () => console.log('Server running on port 5000'));
+// Server Startup
+app.listen(process.env.PORT || 5000, () => {
+  console.log(`Server running on port ${process.env.PORT || 5000}`);
+});
