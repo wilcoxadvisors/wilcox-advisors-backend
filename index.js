@@ -11,8 +11,11 @@ const { OpenAI } = require('openai');
 dotenv.config();
 const app = express();
 
-// Middleware
-app.use(cors({ origin: process.env.ALLOWED_ORIGIN }));
+// Middle ware
+// Configure CORS to allow requests from the frontend
+app.use(cors({
+  origin: 'https://vocal-daffodil-cc98bd.netlify.app'
+}));
 app.use(express.json());
 
 // MongoDB Connection
