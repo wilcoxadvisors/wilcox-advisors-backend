@@ -207,9 +207,19 @@ app.post('/api/contact', auth, async (req, res) => {
   }
 });
 
-app.post('/api/chat', auth, async (req, res) => {
+app.post('/api/chat', async (req, res) => { // Remove 'auth' middleware
   const { message } = req.body;
   try {
+    const token = req.headers['authorization']?.split(' ')[1]; // Optionally check for token
+    let userId = null;
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        userId = decoded.id; // Use user ID if authenticated
+      } catch (error) {
+        console.warn('Invalid token, proceeding as guest:', error);
+      }
+    }
     const completion = await openai.chat.completions.create({
       model: 'grok-2-latest', // Using xAI's Grok model
       messages: [
@@ -227,7 +237,7 @@ app.post('/api/chat', auth, async (req, res) => {
       temperature: 0, // Deterministic responses for consistency
     });
     const reply = completion.choices[0].message.content.trim();
-    const chat = new Chat({ message, reply, userId: req.user?.id, isClientChat: false });
+    const chat = new Chat({ message, reply, userId, isClientChat: false }); // Use null if no userId
     await chat.save();
     res.json({ reply });
   } catch (error) {
@@ -236,9 +246,19 @@ app.post('/api/chat', auth, async (req, res) => {
   }
 });
 
-app.post('/api/client/chat', auth, async (req, res) => {
+app.post('/api/client/chat', async (req, res) => { // Remove 'auth' middleware
   const { message } = req.body;
   try {
+    const token = req.headers['authorization']?.split(' ')[1]; // Optionally check for token
+    let userId = null;
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        userId = decoded.id; // Use user ID if authenticated
+      } catch (error) {
+        console.warn('Invalid token, proceeding as guest:', error);
+      }
+    }
     const completion = await openai.chat.completions.create({
       model: 'grok-2-latest', // Using xAI's Grok model
       messages: [
@@ -256,7 +276,7 @@ app.post('/api/client/chat', auth, async (req, res) => {
       temperature: 0, // Deterministic responses for consistency
     });
     const reply = completion.choices[0].message.content.trim();
-    const chat = new Chat({ message, reply, userId: req.user.id, isClientChat: true });
+    const chat = new Chat({ message, reply, userId, isClientChat: true }); // Use null if no userId
     await chat.save();
     res.json({ reply });
   } catch (error) {
