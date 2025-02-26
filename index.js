@@ -207,7 +207,7 @@ app.post('/api/contact', auth, async (req, res) => {
   }
 });
 
-app.post('/api/chat', async (req, res) => { // Remove 'auth' middleware
+app.post('/api/chat', async (req, res) => {
   const { message } = req.body;
   try {
     const token = req.headers['authorization']?.split(' ')[1]; // Optionally check for token
@@ -215,13 +215,17 @@ app.post('/api/chat', async (req, res) => { // Remove 'auth' middleware
     if (token) {
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        userId = decoded.id; // Use user ID if authenticated
+        userId = decoded.id; // Use user ID if valid
       } catch (error) {
-        console.warn('Invalid token, proceeding as guest:', error);
+        if (error.name === 'TokenExpiredError') {
+          console.warn('Expired token, proceeding as guest:', error.message);
+        } else {
+          console.warn('Invalid token, proceeding as guest:', error.message);
+        }
       }
     }
     const completion = await openai.chat.completions.create({
-      model: 'grok-2-latest', // Using xAI's Grok model
+      model: 'grok-2-latest',
       messages: [
         {
           role: 'system',
@@ -233,11 +237,11 @@ app.post('/api/chat', async (req, res) => { // Remove 'auth' middleware
         },
       ],
       stream: false,
-      max_tokens: 100, // Limit response length
-      temperature: 0, // Deterministic responses for consistency
+      max_tokens: 100,
+      temperature: 0,
     });
     const reply = completion.choices[0].message.content.trim();
-    const chat = new Chat({ message, reply, userId, isClientChat: false }); // Use null if no userId
+    const chat = new Chat({ message, reply, userId, isClientChat: false });
     await chat.save();
     res.json({ reply });
   } catch (error) {
@@ -246,7 +250,7 @@ app.post('/api/chat', async (req, res) => { // Remove 'auth' middleware
   }
 });
 
-app.post('/api/client/chat', async (req, res) => { // Remove 'auth' middleware
+app.post('/api/client/chat', async (req, res) => {
   const { message } = req.body;
   try {
     const token = req.headers['authorization']?.split(' ')[1]; // Optionally check for token
@@ -254,13 +258,17 @@ app.post('/api/client/chat', async (req, res) => { // Remove 'auth' middleware
     if (token) {
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        userId = decoded.id; // Use user ID if authenticated
+        userId = decoded.id; // Use user ID if valid
       } catch (error) {
-        console.warn('Invalid token, proceeding as guest:', error);
+        if (error.name === 'TokenExpiredError') {
+          console.warn('Expired token, proceeding as guest:', error.message);
+        } else {
+          console.warn('Invalid token, proceeding as guest:', error.message);
+        }
       }
     }
     const completion = await openai.chat.completions.create({
-      model: 'grok-2-latest', // Using xAI's Grok model
+      model: 'grok-2-latest',
       messages: [
         {
           role: 'system',
@@ -272,11 +280,11 @@ app.post('/api/client/chat', async (req, res) => { // Remove 'auth' middleware
         },
       ],
       stream: false,
-      max_tokens: 100, // Limit response length
-      temperature: 0, // Deterministic responses for consistency
+      max_tokens: 100,
+      temperature: 0,
     });
     const reply = completion.choices[0].message.content.trim();
-    const chat = new Chat({ message, reply, userId, isClientChat: true }); // Use null if no userId
+    const chat = new Chat({ message, reply, userId, isClientChat: true });
     await chat.save();
     res.json({ reply });
   } catch (error) {
