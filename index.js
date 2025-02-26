@@ -28,8 +28,11 @@ const s3 = new AWS.S3({
   region: process.env.AWS_REGION,
 });
 
-// OpenAI Configuration
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// xAI (Grok) Setup
+const openai = new OpenAI({
+  apiKey: process.env.XAI_API_KEY, // New environment variable for xAI
+  base_url: "https://api.x.ai/v1", // xAI API endpoint
+});
 
 // Models
 const UserSchema = new mongoose.Schema({
@@ -208,21 +211,27 @@ app.post('/api/chat', auth, async (req, res) => {
   const { message } = req.body;
   try {
     const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+      model: 'grok-2-latest', // Using xAI's Grok model
       messages: [
         {
+          role: 'system',
+          content: 'You are Grok, a chatbot acting as an assistant for Wilcox Advisors, a financial services provider specializing in small businesses. Your responses must be concise, professional, and strictly limited to information about Wilcox Advisors’ website and services, including Bookkeeping, Monthly Financial Package, Cash Flow Management, Custom Reporting, Budgeting & Forecasting, and Outsourced Controller/CFO Services. Do not provide free detailed advice or general knowledge outside these services. Encourage users to schedule a consultation for specific guidance or detailed information.'
+        },
+        {
           role: 'user',
-          content: `You are an assistant for Wilcox Advisors, a financial services provider for small businesses. Respond to: "${message}" with a concise answer relevant to our services (Bookkeeping, Monthly Financial Package, Cash Flow Management, Custom Reporting, Budgeting & Forecasting, Outsourced Controller/CFO Services), avoiding free detailed advice. Encourage a consultation if needed.`,
+          content: `Respond to: "${message}" with a concise answer focused only on Wilcox Advisors’ services and website. Avoid free detailed advice and suggest a consultation if the user seeks specifics.`
         },
       ],
-      max_tokens: 100,
+      stream: false,
+      max_tokens: 100, // Limit response length
+      temperature: 0, // Deterministic responses for consistency
     });
     const reply = completion.choices[0].message.content.trim();
     const chat = new Chat({ message, reply, userId: req.user?.id, isClientChat: false });
     await chat.save();
     res.json({ reply });
   } catch (error) {
-    console.error('OpenAI API error in /api/chat:', error);
+    console.error('xAI API error in /api/chat:', error);
     res.status(500).json({ message: 'Failed to get response from AI' });
   }
 });
@@ -231,21 +240,27 @@ app.post('/api/client/chat', auth, async (req, res) => {
   const { message } = req.body;
   try {
     const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+      model: 'grok-2-latest', // Using xAI's Grok model
       messages: [
         {
+          role: 'system',
+          content: 'You are Grok, a chatbot acting as an assistant for Wilcox Advisors, a financial services provider specializing in small businesses. Your responses must be concise, professional, and strictly limited to information about Wilcox Advisors’ website and services, including Bookkeeping, Monthly Financial Package, Cash Flow Management, Custom Reporting, Budgeting & Forecasting, and Outsourced Controller/CFO Services. Do not provide free detailed advice or general knowledge outside these services. Suggest a consultation for specific guidance or detailed information.'
+        },
+        {
           role: 'user',
-          content: `You are an assistant for Wilcox Advisors, a financial services provider for small businesses. Respond to: "${message}" with a concise answer relevant to our services (Bookkeeping, Monthly Financial Package, Cash Flow Management, Custom Reporting, Budgeting & Forecasting, Outsourced Controller/CFO Services). Avoid giving free detailed advice; suggest a consultation for specifics.`,
+          content: `Respond to: "${message}" with a concise answer focused only on Wilcox Advisors’ services and website. Avoid free detailed advice and recommend a consultation for specifics.`
         },
       ],
-      max_tokens: 100,
+      stream: false,
+      max_tokens: 100, // Limit response length
+      temperature: 0, // Deterministic responses for consistency
     });
     const reply = completion.choices[0].message.content.trim();
     const chat = new Chat({ message, reply, userId: req.user.id, isClientChat: true });
     await chat.save();
     res.json({ reply });
   } catch (error) {
-    console.error('OpenAI API error in /api/client/chat:', error);
+    console.error('xAI API error in /api/client/chat:', error);
     res.status(500).json({ message: 'Failed to get response from AI' });
   }
 });
