@@ -30,7 +30,7 @@ const s3 = new AWS.S3({
 
 // xAI (Grok) Setup
 const openai = new OpenAI({
-  apiKey: process.env.XAI_API_KEY, // New environment variable for xAI
+  apiKey: process.env.XAI_API_KEY, // Use xAI API key from environment
   base_url: "https://api.x.ai/v1", // xAI API endpoint
 });
 
@@ -43,7 +43,7 @@ const UserSchema = new mongoose.Schema({
 const User = mongoose.model('User', UserSchema);
 
 const ConsultationSchema = new mongoose.Schema({
-  userId: String,
+  userId: String, // Optional for guests
   companyName: String,
   industry: String,
   yearsInBusiness: String,
@@ -60,7 +60,7 @@ const ConsultationSchema = new mongoose.Schema({
 const Consultation = mongoose.model('Consultation', ConsultationSchema);
 
 const ChecklistSchema = new mongoose.Schema({
-  userId: String,
+  userId: String, // Optional for guests
   name: String,
   email: String,
   companyName: String,
@@ -70,7 +70,7 @@ const ChecklistSchema = new mongoose.Schema({
 const Checklist = mongoose.model('Checklist', ChecklistSchema);
 
 const ContactSchema = new mongoose.Schema({
-  userId: String,
+  userId: String, // Optional for guests
   name: String,
   email: String,
   company: String,
@@ -80,7 +80,7 @@ const ContactSchema = new mongoose.Schema({
 const Contact = mongoose.model('Contact', ContactSchema);
 
 const ChatSchema = new mongoose.Schema({
-  userId: String,
+  userId: String, // Can be null for guest chats
   message: String,
   reply: String,
   isClientChat: Boolean,
@@ -89,7 +89,7 @@ const ChatSchema = new mongoose.Schema({
 const Chat = mongoose.model('Chat', ChatSchema);
 
 const FileSchema = new mongoose.Schema({
-  userId: String,
+  userId: String, // Required for authenticated users only
   fileName: String,
   s3Key: String,
   timestamp: { type: Date, default: Date.now },
@@ -151,7 +151,7 @@ app.post('/api/signup', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = new User({ email, password: hashedPassword });
     await user.save();
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '24h' }); // Extended to 24 hours
     res.json({ token });
   } catch (error) {
     console.error('Signup error:', error);
@@ -166,7 +166,7 @@ app.post('/api/login', async (req, res) => {
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
-    const token = jwt.sign({ id: user._id, isAdmin: user.isAdmin }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign({ id: user._id, isAdmin: user.isAdmin }, process.env.JWT_SECRET, { expiresIn: '24h' }); // Extended to 24 hours
     res.json({ token, isAdmin: user.isAdmin });
   } catch (error) {
     console.error('Login error:', error);
@@ -217,9 +217,7 @@ app.post('/api/chat', async (req, res) => {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         userId = decoded.id; // Use user ID if valid
       } catch (error) {
-        if (error.name === 'TokenExpiredError') {
-          console.warn('Expired token, proceeding as guest:', error.message);
-        } else {
+        if (error.name !== 'TokenExpiredError') { // Only log non-expiration errors
           console.warn('Invalid token, proceeding as guest:', error.message);
         }
       }
@@ -260,9 +258,7 @@ app.post('/api/client/chat', async (req, res) => {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         userId = decoded.id; // Use user ID if valid
       } catch (error) {
-        if (error.name === 'TokenExpiredError') {
-          console.warn('Expired token, proceeding as guest:', error.message);
-        } else {
+        if (error.name !== 'TokenExpiredError') { // Only log non-expiration errors
           console.warn('Invalid token, proceeding as guest:', error.message);
         }
       }
@@ -336,7 +332,7 @@ app.get('/api/admin/dashboard', adminAuth, async (req, res) => {
 
     const trends = `Latest trends: High interest in ${consultations.map(c => c.services).flat().reduce((acc, curr) => { acc[curr] = (acc[curr] || 0) + 1; return acc; }, {})} Customer questions: ${chats.map(c => c.message).join(', ')}.`;
     const blogDraft = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+      model: 'grok-2-latest', // Updated to use xAI’s Grok model
       messages: [
         {
           role: 'user',
@@ -344,6 +340,7 @@ app.get('/api/admin/dashboard', adminAuth, async (req, res) => {
         },
       ],
       max_tokens: 500,
+      temperature: 0, // Deterministic for consistency
     }).then(res => ({ title: 'Latest Financial Insights for Your Business', content: res.choices[0].message.content.trim() }));
 
     const heroContent = (await Content.findOne({ section: 'hero' })) || { section: 'hero', value: { headline: 'Financial Solutions for Small Businesses', subtext: 'Wilcox Advisors helps small businesses like yours grow smarter with tailored financial expertise.' } };
@@ -403,6 +400,6 @@ app.put('/api/blog/:id', adminAuth, async (req, res) => {
 });
 
 // Server Startup
-app.listen(process.env.PORT || 10000, () => {
+app.listen(process.env.PORT || 10000, () => { // Updated to match Render’s default port
   console.log(`Server running on port ${process.env.PORT || 10000}`);
 });
