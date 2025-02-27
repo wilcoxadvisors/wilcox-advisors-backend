@@ -31,7 +31,7 @@ const s3 = new AWS.S3({
 // xAI (Grok) Setup
 const openai = new OpenAI({
   apiKey: process.env.XAI_API_KEY, // Use xAI API key from environment
-  base_url: "https://api.x.ai/v1", // xAI API endpoint
+  baseURL: "https://api.x.ai/v1", // xAI API endpoint
 });
 
 // Models
