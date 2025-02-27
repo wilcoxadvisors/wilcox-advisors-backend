@@ -403,6 +403,6 @@ app.put('/api/blog/:id', adminAuth, async (req, res) => {
 });
 
 // Server Startup
-app.listen(process.env.PORT || 5000, () => {
-  console.log(`Server running on port ${process.env.PORT || 5000}`);
+app.listen(process.env.PORT || 10000, () => {
+  console.log(`Server running on port ${process.env.PORT || 10000}`);
 });
