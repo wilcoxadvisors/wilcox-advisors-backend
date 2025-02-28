@@ -15,7 +15,7 @@ const path = require('path');
 dotenv.config();
 const app = express();
 
-// Middle ware
+// Middleware
 // Configure CORS to allow requests from the frontend
 app.use(cors({
   origin: 'https://vocal-daffodil-cc98bd.netlify.app',
@@ -25,27 +25,64 @@ app.use(cors({
 app.use(express.json());
 
 // MongoDB Connection
-mongoose.connect(process.env.MONGO_URI);
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('MongoDB connected'))
+  .catch(err => console.error('MongoDB connection error:', err));
 
-// Email Configuration
-const emailTransporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD
+// Improved Email Configuration
+let emailTransporter;
+
+// Function to create a nodemailer transporter with error handling
+const createTransporter = () => {
+  try {
+    // Create a transporter with Gmail settings
+    emailTransporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASSWORD
+      },
+      tls: {
+        rejectUnauthorized: false // For development environments
+      }
+    });
+    
+    // Verify the connection
+    emailTransporter.verify(function(error, success) {
+      if (error) {
+        console.error('Email transporter verification failed:', error);
+      } else {
+        console.log('Email server is ready to take our messages');
+      }
+    });
+  } catch (error) {
+    console.error('Failed to create email transporter:', error);
   }
-});
+};
 
-// Helper function to send emails
+// Initialize the email transporter
+createTransporter();
+
+// Helper function to send emails with fallback logging
 async function sendNotificationEmail(options) {
   try {
-    await emailTransporter.sendMail(options);
-    console.log('Email sent successfully');
+    if (!emailTransporter) {
+      createTransporter(); // Try to recreate transporter if it doesn't exist
+    }
+    
+    const info = await emailTransporter.sendMail(options);
+    console.log('Email sent successfully:', info.messageId);
     return true;
   } catch (error) {
     console.error('Email sending failed:', error);
+    
+    // Log the email content for backup
+    console.log('--- Email Content (Fallback) ---');
+    console.log('To:', options.to);
+    console.log('Subject:', options.subject);
+    console.log('Body:', options.html ? 'HTML Content' : options.text);
+    console.log('--- End Email Content ---');
+    
     return false;
   }
 }
@@ -229,7 +266,11 @@ app.post('/api/consultation', auth, async (req, res) => {
       `
     };
     
-    sendNotificationEmail(mailOptions);
+    // Non-blocking email sending
+    sendNotificationEmail(mailOptions).catch(error => {
+      console.error('Failed to send consultation notification email:', error);
+    });
+    
     res.status(201).json({ message: 'Consultation submitted' });
   } catch (error) {
     console.error('Consultation submission error:', error);
@@ -312,7 +353,10 @@ app.post('/api/checklist', auth, async (req, res) => {
       ]
     };
     
-    sendNotificationEmail(mailOptions);
+    // Non-blocking email sending
+    sendNotificationEmail(mailOptions).catch(error => {
+      console.error('Failed to send checklist email:', error);
+    });
     
     // Send notification email
     const notificationOptions = {
@@ -328,7 +372,10 @@ app.post('/api/checklist', auth, async (req, res) => {
       `
     };
     
-    sendNotificationEmail(notificationOptions);
+    // Non-blocking email sending
+    sendNotificationEmail(notificationOptions).catch(error => {
+      console.error('Failed to send checklist notification email:', error);
+    });
     
     res.status(201).json({ message: 'Checklist sent to your email' });
   } catch (error) {
@@ -356,7 +403,11 @@ app.post('/api/contact', auth, async (req, res) => {
       `
     };
     
-    sendNotificationEmail(mailOptions);
+    // Non-blocking email sending
+    sendNotificationEmail(mailOptions).catch(error => {
+      console.error('Failed to send contact form notification email:', error);
+    });
+    
     res.status(201).json({ message: 'Contact form submitted' });
   } catch (error) {
     console.error('Contact form submission error:', error);
@@ -559,7 +610,13 @@ app.put('/api/blog/:id', adminAuth, async (req, res) => {
 // Serve static files
 app.use('/pdfs', express.static(path.join(__dirname, 'public', 'pdfs')));
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date() });
+});
+
 // Server Startup
-app.listen(process.env.PORT || 10000, () => { // Updated to match Render's default port
-  console.log(`Server running on port ${process.env.PORT || 10000}`);
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
