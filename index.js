@@ -7,6 +7,10 @@ const AWS = require('aws-sdk');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { OpenAI } = require('openai');
+const nodemailer = require('nodemailer');
+const PDFDocument = require('pdfkit');
+const fs = require('fs');
+const path = require('path');
 
 dotenv.config();
 const app = express();
@@ -20,6 +24,15 @@ app.use(express.json());
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGO_URI);
+
+// Email Configuration
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASSWORD
+  }
+});
 
 // AWS S3 Configuration
 const s3 = new AWS.S3({
@@ -178,6 +191,29 @@ app.post('/api/consultation', auth, async (req, res) => {
   try {
     const consultation = new Consultation({ ...req.body, userId: req.user?.id });
     await consultation.save();
+    
+    // Send email notification
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: process.env.NOTIFICATION_EMAIL,
+      subject: 'New Consultation Request - Wilcox Advisors',
+      html: `
+        <h2>New Consultation Request</h2>
+        <p><strong>Company:</strong> ${req.body.companyName}</p>
+        <p><strong>Industry:</strong> ${req.body.industry}</p>
+        <p><strong>Years in Business:</strong> ${req.body.yearsInBusiness}</p>
+        <p><strong>Revenue Range:</strong> ${req.body.revenueRange}</p>
+        <p><strong>Services:</strong> ${req.body.services.join(', ')}</p>
+        <p><strong>Contact:</strong> ${req.body.contactName}</p>
+        <p><strong>Email:</strong> ${req.body.email}</p>
+        <p><strong>Phone:</strong> ${req.body.phone || 'Not provided'}</p>
+        <p><strong>Preferred Contact:</strong> ${req.body.preferredContact}</p>
+        <p><strong>Best Time:</strong> ${req.body.preferredTime}</p>
+        <p><strong>Notes:</strong> ${req.body.notes || 'None'}</p>
+      `
+    };
+    
+    await transporter.sendMail(mailOptions);
     res.status(201).json({ message: 'Consultation submitted' });
   } catch (error) {
     console.error('Consultation submission error:', error);
@@ -189,7 +225,96 @@ app.post('/api/checklist', auth, async (req, res) => {
   try {
     const checklist = new Checklist({ ...req.body, userId: req.user?.id });
     await checklist.save();
-    res.status(201).json({ message: 'Checklist request submitted' });
+    
+    // Create PDF directory if it doesn't exist
+    const pdfDir = path.join(__dirname, 'public', 'pdfs');
+    if (!fs.existsSync(pdfDir)) {
+      fs.mkdirSync(pdfDir, { recursive: true });
+    }
+    
+    // Generate unique filename
+    const filename = `financial-checklist-${Date.now()}.pdf`;
+    const pdfPath = path.join(pdfDir, filename);
+    
+    // Create PDF
+    const doc = new PDFDocument({ margin: 50 });
+    doc.pipe(fs.createWriteStream(pdfPath));
+    
+    // Add content to PDF
+    doc.fontSize(25).text('Financial Checklist for Small Businesses', { align: 'center' });
+    doc.moveDown();
+    doc.fontSize(12).text(`Prepared for: ${req.body.name} (${req.body.companyName})`, { align: 'center' });
+    doc.moveDown(2);
+    
+    // Add checklist items
+    const checklistItems = [
+      'Set up separate business bank accounts and credit cards',
+      'Establish a reliable bookkeeping system',
+      'Track all business expenses with proper documentation',
+      'Create a realistic budget with monthly, quarterly, and annual projections',
+      'Plan for taxes by setting aside appropriate funds',
+      'Review financial statements monthly',
+      'Reconcile accounts regularly',
+      'Create a cash flow management system',
+      'Establish proper invoicing and accounts receivable procedures',
+      'Review pricing structure regularly to ensure profitability',
+      'Build relationships with financial professionals',
+      'Develop an emergency fund for unexpected expenses',
+      'Consider insurance options to protect your business',
+      'Plan for retirement and investment options',
+      'Review financial goals quarterly and adjust as needed'
+    ];
+    
+    checklistItems.forEach((item, index) => {
+      doc.fontSize(12).text(`${index + 1}. ${item}`);
+      doc.moveDown();
+    });
+    
+    doc.moveDown();
+    doc.fontSize(14).text('Need help implementing these steps?', { align: 'center' });
+    doc.fontSize(14).text('Contact Wilcox Advisors for a free consultation!', { align: 'center' });
+    
+    doc.end();
+    
+    // Send checklist email
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: req.body.email,
+      subject: 'Your Financial Checklist - Wilcox Advisors',
+      html: `
+        <h2>Thank you for requesting our Financial Checklist!</h2>
+        <p>Hello ${req.body.name},</p>
+        <p>We've attached your personalized Small Business Financial Checklist. This document includes essential steps to help manage your business finances more effectively.</p>
+        <p>If you have any questions or would like assistance implementing these steps, please don't hesitate to contact us for a free consultation.</p>
+        <p>Regards,<br>The Wilcox Advisors Team</p>
+      `,
+      attachments: [
+        {
+          filename: 'Financial-Checklist.pdf',
+          path: pdfPath
+        }
+      ]
+    };
+    
+    await transporter.sendMail(mailOptions);
+    
+    // Send notification email
+    const notificationOptions = {
+      from: process.env.EMAIL_USER,
+      to: process.env.NOTIFICATION_EMAIL,
+      subject: 'New Checklist Request - Wilcox Advisors',
+      html: `
+        <h2>New Checklist Request</h2>
+        <p><strong>Name:</strong> ${req.body.name}</p>
+        <p><strong>Email:</strong> ${req.body.email}</p>
+        <p><strong>Company:</strong> ${req.body.companyName}</p>
+        <p><strong>Revenue Range:</strong> ${req.body.revenueRange}</p>
+      `
+    };
+    
+    await transporter.sendMail(notificationOptions);
+    
+    res.status(201).json({ message: 'Checklist sent to your email' });
   } catch (error) {
     console.error('Checklist submission error:', error);
     res.status(500).json({ message: 'Failed to submit checklist request' });
@@ -200,6 +325,22 @@ app.post('/api/contact', auth, async (req, res) => {
   try {
     const contact = new Contact({ ...req.body, userId: req.user?.id });
     await contact.save();
+    
+    // Send email notification
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: process.env.NOTIFICATION_EMAIL,
+      subject: 'New Contact Form Submission - Wilcox Advisors',
+      html: `
+        <h2>New Contact Form Submission</h2>
+        <p><strong>Name:</strong> ${req.body.name}</p>
+        <p><strong>Email:</strong> ${req.body.email}</p>
+        <p><strong>Company:</strong> ${req.body.company}</p>
+        <p><strong>Message:</strong> ${req.body.message}</p>
+      `
+    };
+    
+    await transporter.sendMail(mailOptions);
     res.status(201).json({ message: 'Contact form submitted' });
   } catch (error) {
     console.error('Contact form submission error:', error);
@@ -227,11 +368,11 @@ app.post('/api/chat', async (req, res) => {
       messages: [
         {
           role: 'system',
-          content: 'You are Grok, a chatbot acting as an assistant for Wilcox Advisors, a financial services provider specializing in small businesses. Your responses must be concise, professional, and strictly limited to information about Wilcox Advisors’ website and services, including Bookkeeping, Monthly Financial Package, Cash Flow Management, Custom Reporting, Budgeting & Forecasting, and Outsourced Controller/CFO Services. Do not provide free detailed advice or general knowledge outside these services. Encourage users to schedule a consultation for specific guidance or detailed information.'
+          content: 'You are Grok, a chatbot acting as an assistant for Wilcox Advisors, a financial services provider specializing in small businesses. Your responses must be concise, professional, and strictly limited to information about Wilcox Advisors' website and services, including Bookkeeping, Monthly Financial Package, Cash Flow Management, Custom Reporting, Budgeting & Forecasting, and Outsourced Controller/CFO Services. Do not provide free detailed advice or general knowledge outside these services. Encourage users to schedule a consultation for specific guidance or detailed information.'
         },
         {
           role: 'user',
-          content: `Respond to: "${message}" with a concise answer focused only on Wilcox Advisors’ services and website. Avoid free detailed advice and suggest a consultation if the user seeks specifics.`
+          content: `Respond to: "${message}" with a concise answer focused only on Wilcox Advisors' services and website. Avoid free detailed advice and suggest a consultation if the user seeks specifics.`
         },
       ],
       stream: false,
@@ -268,11 +409,11 @@ app.post('/api/client/chat', async (req, res) => {
       messages: [
         {
           role: 'system',
-          content: 'You are Grok, a chatbot acting as an assistant for Wilcox Advisors, a financial services provider specializing in small businesses. Your responses must be concise, professional, and strictly limited to information about Wilcox Advisors’ website and services, including Bookkeeping, Monthly Financial Package, Cash Flow Management, Custom Reporting, Budgeting & Forecasting, and Outsourced Controller/CFO Services. Do not provide free detailed advice or general knowledge outside these services. Suggest a consultation for specific guidance or detailed information.'
+          content: 'You are Grok, a chatbot acting as an assistant for Wilcox Advisors, a financial services provider specializing in small businesses. Your responses must be concise, professional, and strictly limited to information about Wilcox Advisors' website and services, including Bookkeeping, Monthly Financial Package, Cash Flow Management, Custom Reporting, Budgeting & Forecasting, and Outsourced Controller/CFO Services. Do not provide free detailed advice or general knowledge outside these services. Suggest a consultation for specific guidance or detailed information.'
         },
         {
           role: 'user',
-          content: `Respond to: "${message}" with a concise answer focused only on Wilcox Advisors’ services and website. Avoid free detailed advice and recommend a consultation for specifics.`
+          content: `Respond to: "${message}" with a concise answer focused only on Wilcox Advisors' services and website. Avoid free detailed advice and recommend a consultation for specifics.`
         },
       ],
       stream: false,
@@ -332,7 +473,7 @@ app.get('/api/admin/dashboard', adminAuth, async (req, res) => {
 
     const trends = `Latest trends: High interest in ${consultations.map(c => c.services).flat().reduce((acc, curr) => { acc[curr] = (acc[curr] || 0) + 1; return acc; }, {})} Customer questions: ${chats.map(c => c.message).join(', ')}.`;
     const blogDraft = await openai.chat.completions.create({
-      model: 'grok-2-latest', // Updated to use xAI’s Grok model
+      model: 'grok-2-latest', // Updated to use xAI's Grok model
       messages: [
         {
           role: 'user',
@@ -399,7 +540,10 @@ app.put('/api/blog/:id', adminAuth, async (req, res) => {
   }
 });
 
+// Serve static files
+app.use('/pdfs', express.static(path.join(__dirname, 'public', 'pdfs')));
+
 // Server Startup
-app.listen(process.env.PORT || 10000, () => { // Updated to match Render’s default port
+app.listen(process.env.PORT || 10000, () => { // Updated to match Render's default port
   console.log(`Server running on port ${process.env.PORT || 10000}`);
 });
