@@ -18,7 +18,9 @@ const app = express();
 // Middle ware
 // Configure CORS to allow requests from the frontend
 app.use(cors({
-  origin: 'https://vocal-daffodil-cc98bd.netlify.app'
+  origin: 'https://vocal-daffodil-cc98bd.netlify.app',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 
