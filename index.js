@@ -28,13 +28,27 @@ app.use(express.json());
 mongoose.connect(process.env.MONGO_URI);
 
 // Email Configuration
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
+const emailTransporter = nodemailer.createTransport({
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASSWORD
   }
 });
+
+// Helper function to send emails
+async function sendNotificationEmail(options) {
+  try {
+    await emailTransporter.sendMail(options);
+    console.log('Email sent successfully');
+    return true;
+  } catch (error) {
+    console.error('Email sending failed:', error);
+    return false;
+  }
+}
 
 // AWS S3 Configuration
 const s3 = new AWS.S3({
@@ -215,7 +229,7 @@ app.post('/api/consultation', auth, async (req, res) => {
       `
     };
     
-    await transporter.sendMail(mailOptions);
+    sendNotificationEmail(mailOptions);
     res.status(201).json({ message: 'Consultation submitted' });
   } catch (error) {
     console.error('Consultation submission error:', error);
@@ -298,7 +312,7 @@ app.post('/api/checklist', auth, async (req, res) => {
       ]
     };
     
-    await transporter.sendMail(mailOptions);
+    sendNotificationEmail(mailOptions);
     
     // Send notification email
     const notificationOptions = {
@@ -314,7 +328,7 @@ app.post('/api/checklist', auth, async (req, res) => {
       `
     };
     
-    await transporter.sendMail(notificationOptions);
+    sendNotificationEmail(notificationOptions);
     
     res.status(201).json({ message: 'Checklist sent to your email' });
   } catch (error) {
@@ -342,7 +356,7 @@ app.post('/api/contact', auth, async (req, res) => {
       `
     };
     
-    await transporter.sendMail(mailOptions);
+    sendNotificationEmail(mailOptions);
     res.status(201).json({ message: 'Contact form submitted' });
   } catch (error) {
     console.error('Contact form submission error:', error);
@@ -370,11 +384,11 @@ app.post('/api/chat', async (req, res) => {
       messages: [
         {
           role: 'system',
-          content: 'You are Grok, a chatbot acting as an assistant for Wilcox Advisors, a financial services provider specializing in small businesses. Your responses must be concise, professional, and strictly limited to information about Wilcox Advisors website and services, including Bookkeeping, Monthly Financial Package, Cash Flow Management, Custom Reporting, Budgeting & Forecasting, and Outsourced Controller/CFO Services. Do not provide free detailed advice or general knowledge outside these services. Encourage users to schedule a consultation for specific guidance or detailed information.'
+          content: "You are Grok, a chatbot acting as an assistant for Wilcox Advisors, a financial services provider specializing in small businesses. Your responses must be concise, professional, and strictly limited to information about Wilcox Advisors' website and services, including Bookkeeping, Monthly Financial Package, Cash Flow Management, Custom Reporting, Budgeting & Forecasting, and Outsourced Controller/CFO Services. Do not provide free detailed advice or general knowledge outside these services. Encourage users to schedule a consultation for specific guidance or detailed information."
         },
         {
           role: 'user',
-          content: `Respond to: "${message}" with a concise answer focused only on Wilcox Advisors services and website. Avoid free detailed advice and suggest a consultation if the user seeks specifics.`
+          content: `Respond to: "${message}" with a concise answer focused only on Wilcox Advisors' services and website. Avoid free detailed advice and suggest a consultation if the user seeks specifics.`
         },
       ],
       stream: false,
@@ -411,11 +425,11 @@ app.post('/api/client/chat', async (req, res) => {
       messages: [
         {
           role: 'system',
-          content: 'You are Grok, a chatbot acting as an assistant for Wilcox Advisors, a financial services provider specializing in small businesses. Your responses must be concise, professional, and strictly limited to information about Wilcox Advisors website and services, including Bookkeeping, Monthly Financial Package, Cash Flow Management, Custom Reporting, Budgeting & Forecasting, and Outsourced Controller/CFO Services. Do not provide free detailed advice or general knowledge outside these services. Suggest a consultation for specific guidance or detailed information.'
+          content: "You are Grok, a chatbot acting as an assistant for Wilcox Advisors, a financial services provider specializing in small businesses. Your responses must be concise, professional, and strictly limited to information about Wilcox Advisors' website and services, including Bookkeeping, Monthly Financial Package, Cash Flow Management, Custom Reporting, Budgeting & Forecasting, and Outsourced Controller/CFO Services. Do not provide free detailed advice or general knowledge outside these services. Suggest a consultation for specific guidance or detailed information."
         },
         {
           role: 'user',
-          content: `Respond to: "${message}" with a concise answer focused only on Wilcox Advisors services and website. Avoid free detailed advice and recommend a consultation for specifics.`
+          content: `Respond to: "${message}" with a concise answer focused only on Wilcox Advisors' services and website. Avoid free detailed advice and recommend a consultation for specifics.`
         },
       ],
       stream: false,
