@@ -100,7 +100,7 @@ const openai = new OpenAI({
   baseURL: "https://api.x.ai/v1", // xAI API endpoint
 });
 
-// Models
+// Models (Preserve existing and add new schemas for Phase 1)
 const UserSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
@@ -177,7 +177,100 @@ const ContentSchema = new mongoose.Schema({
 });
 const Content = mongoose.model('Content', ContentSchema);
 
-// Authentication Middleware
+// New schemas for Phase 1 (Manual Data Entry)
+const AccountSchema = new mongoose.Schema({
+  clientId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  accountNumber: { type: String, required: true },
+  accountName: { type: String, required: true },
+  accountType: { type: String, required: true },
+  subledgerType: { type: String }, // e.g., 'AP', 'AR'
+  provider: { type: String },
+  isManual: { type: Boolean, default: true }
+});
+const Account = mongoose.model('Account', AccountSchema);
+
+const TransactionSchema = new mongoose.Schema({
+  accountId: { type: mongoose.Schema.Types.ObjectId, ref: 'Account', required: true },
+  date: { type: Date, required: true },
+  transactionNo: String,
+  lineNo: Number,
+  documentNumber: String,
+  description: String,
+  amount: { type: Number, required: true },
+  type: { type: String, enum: ['debit', 'credit'], required: true },
+  category: String,
+  subledgerType: String,
+  journalType: String,
+  vendorName: String,
+  employeeId: String,
+  projectId: String,
+  isManual: { type: Boolean, default: true }
+});
+const Transaction = mongoose.model('Transaction', TransactionSchema);
+
+const JournalEntrySchema = new mongoose.Schema({
+  clientId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  date: { type: Date, required: true },
+  transactionNo: String,
+  description: String,
+  debitAccount: { type: mongoose.Schema.Types.ObjectId, ref: 'Account', required: true },
+  creditAccount: { type: mongoose.Schema.Types.ObjectId, ref: 'Account', required: true },
+  amount: { type: Number, required: true },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  subledgerType: String,
+  journalType: String,
+  isManual: { type: Boolean, default: true }
+});
+const JournalEntry = mongoose.model('JournalEntry', JournalEntrySchema);
+
+const PayrollEntrySchema = new mongoose.Schema({
+  clientId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  employeeId: String,
+  date: { type: Date, required: true },
+  amount: { type: Number, required: true },
+  type: { type: String, enum: ['salary', 'bonus', 'deduction'], required: true },
+  status: String,
+  subledgerType: String,
+  isManual: { type: Boolean, default: true }
+});
+const PayrollEntry = mongoose.model('PayrollEntry', PayrollEntrySchema);
+
+const BudgetSchema = new mongoose.Schema({
+  clientId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  accountNumber: { type: String, required: true },
+  subledgerType: String,
+  amount: { type: Number, required: true },
+  period: { type: String, enum: ['monthly', 'quarterly'], required: true },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+  isManual: { type: Boolean, default: true }
+});
+const Budget = mongoose.model('Budget', BudgetSchema);
+
+const CashFlowForecastSchema = new mongoose.Schema({
+  clientId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  forecastPeriod: { type: Date, required: true },
+  inflows: { type: Number, required: true },
+  outflows: { type: Number, required: true },
+  netCash: { type: Number, required: true },
+  generatedAt: { type: Date, default: Date.now },
+  aiRecommendations: { type: Object },
+  isManual: { type: Boolean, default: true }
+});
+const CashFlowForecast = mongoose.model('CashFlowForecast', CashFlowForecastSchema);
+
+const AuditLogSchema = new mongoose.Schema({
+  clientId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  action: { type: String, required: true },
+  entityType: { type: String, required: true },
+  entityId: String,
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  timestamp: { type: Date, default: Date.now },
+  details: { type: Object }
+});
+const AuditLog = mongoose.model('AuditLog', AuditLogSchema);
+
+// Authentication Middleware (Preserve existing)
 const auth = (req, res, next) => {
   const token = req.headers['authorization']?.split(' ')[1];
   if (!token && req.method !== 'POST') return res.status(401).json({ message: 'Unauthorized' });
@@ -206,11 +299,11 @@ const adminAuth = async (req, res, next) => {
   }
 };
 
-// Multer Setup for File Uploads
+// Multer Setup for File Uploads (Preserve existing)
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-// Routes
+// Routes (Preserve all existing routes)
 app.post('/api/signup', async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -610,12 +703,27 @@ app.put('/api/blog/:id', adminAuth, async (req, res) => {
 // Serve static files
 app.use('/pdfs', express.static(path.join(__dirname, 'public', 'pdfs')));
 
-// Health check endpoint
+// Health check endpoint (Preserve existing)
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date() });
 });
 
-// Server Startup
+// Test endpoint for MongoDB (New for Phase 1)
+app.get('/api/test', async (req, res) => {
+  try {
+    const result = await User.findOne();
+    res.status(200).json({ 
+      message: 'Backend is running and connected to MongoDB', 
+      timestamp: new Date(),
+      sampleData: result ? result.email : 'No users found'
+    });
+  } catch (error) {
+    console.error('MongoDB test error:', error);
+    res.status(500).json({ message: 'Failed to connect to MongoDB' });
+  }
+});
+
+// Server Startup (Preserve existing)
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
