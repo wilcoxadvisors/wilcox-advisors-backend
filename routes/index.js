@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const accountingRoutes = require('./accounting');
 
-// Add your module routes here (accounting.js, etc.)
+router.use('/accounting', accountingRoutes);
 
 module.exports = router;
