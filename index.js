@@ -303,7 +303,7 @@ const adminAuth = async (req, res, next) => {
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-// Routes (Preserve all existing routes)
+// Routes (Preserve all existing routes, but move to routes/ later)
 app.post('/api/signup', async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -723,7 +723,19 @@ app.get('/api/test', async (req, res) => {
   }
 });
 
-// Server Startup (Preserve existing)
+// Export middleware for routes
+module.exports = { auth, adminAuth };
+
+// Try to load modular routes, but handle errors gracefully
+try {
+  const routes = require('./routes');
+  app.use('/api', routes);
+  console.log('Modular routes loaded successfully');
+} catch (error) {
+  console.warn('Could not load modular routes:', error.message);
+}
+
+// Server Startup
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
