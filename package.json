@@ -12,8 +12,7 @@
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.10",
     "openai": "^4.38.1",
-    "pdfkit": "^0.14.0",
-    "pg": "^8.11.3"  // Added for PostgreSQL support in Phase 1
+    "pdfkit": "^0.14.0"
   },
   "scripts": {
     "start": "node index.js"
