@@ -3,13 +3,12 @@ const User = require('../models/user');
 
 // Basic authentication middleware
 exports.auth = (req, res, next) => {
-  const token = req.headers['authorization']?.split(' ')[1];
-  if (!token && req.method !== 'POST') return res.status(401).json({ message: 'Unauthorized' });
+  const token = req.cookies.auth_token;
+  if (!token) return res.status(401).json({ message: 'Unauthorized' });
+  
   try {
-    if (token) {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = decoded;
-    }
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
     next();
   } catch (error) {
     res.status(401).json({ message: 'Invalid token' });
@@ -18,8 +17,9 @@ exports.auth = (req, res, next) => {
 
 // Admin authentication middleware
 exports.adminAuth = async (req, res, next) => {
-  const token = req.headers['authorization']?.split(' ')[1];
+  const token = req.cookies.auth_token;
   if (!token) return res.status(401).json({ message: 'Unauthorized' });
+  
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.id);
