@@ -1,16 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const mongoose = require('mongoose');
-const { auth } = require('../index'); // Import auth middleware from index.js
-
-// Access models directly via mongoose.model() (defined in index.js)
-const JournalEntry = mongoose.model('JournalEntry');
-const Account = mongoose.model('Account');
-const AuditLog = mongoose.model('AuditLog');
-const File = mongoose.model('File');
+const JournalEntry = require('../models/journalEntry');
+const Account = require('../models/account');
+const AuditLog = require('../models/auditLog');
+const File = require('../models/file');
+const { auth } = require('../middleware/auth');
 
 // Manual Journal Entry Route (Multiple Entries with Supporting Docs)
-router.post('/clients/manual-journal-entry', auth, async (req, res) => {
+router.post('/journal-entry', auth, async (req, res, next) => {
   const { date, transactionNo, description, entries, supportingDocs } = req.body;
   try {
     // Validate header fields with specific errors
@@ -214,16 +211,12 @@ router.post('/clients/manual-journal-entry', auth, async (req, res) => {
       documentWarnings: documentErrors.length > 0 ? documentErrors : undefined
     });
   } catch (error) {
-    console.error('Manual journal entries error:', error);
-    res.status(500).json({ 
-      message: 'Failed to save journal entries',
-      error: process.env.NODE_ENV === 'development' ? error.message : 'Server error'
-    });
+    next(error);
   }
 });
 
 // Get Journal Entries
-router.get('/journal-entries', auth, async (req, res) => {
+router.get('/journal-entries', auth, async (req, res, next) => {
   try {
     const { startDate, endDate, accountNo, limit = 50, page = 1 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -304,16 +297,12 @@ router.get('/journal-entries', auth, async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching journal entries:', error);
-    res.status(500).json({ 
-      message: 'Failed to fetch journal entries',
-      error: process.env.NODE_ENV === 'development' ? error.message : 'Server error'
-    });
+    next(error);
   }
 });
 
 // Delete Journal Entry (with appropriate permissions)
-router.delete('/journal-entries/:id', auth, async (req, res) => {
+router.delete('/journal-entries/:id', auth, async (req, res, next) => {
   try {
     const journalEntryId = req.params.id;
     
@@ -361,11 +350,7 @@ router.delete('/journal-entries/:id', auth, async (req, res) => {
       id: journalEntryId
     });
   } catch (error) {
-    console.error('Error deleting journal entry:', error);
-    res.status(500).json({ 
-      message: 'Failed to delete journal entry',
-      error: process.env.NODE_ENV === 'development' ? error.message : 'Server error'
-    });
+    next(error);
   }
 });
 
