@@ -20,7 +20,15 @@ router.post('/signup', async (req, res, next) => {
     // Generate JWT token
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '24h' });
     
-    res.json({ token });
+    // Set token as HttpOnly cookie
+    res.cookie('auth_token', token, {
+      httpOnly: true, 
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    });
+    
+    res.status(201).json({ isAdmin: user.isAdmin });
   } catch (error) {
     next(error);
   }
@@ -49,10 +57,25 @@ router.post('/login', async (req, res, next) => {
       { expiresIn: '24h' }
     );
     
-    res.json({ token, isAdmin: user.isAdmin });
+    // Set token as HttpOnly cookie
+    res.cookie('auth_token', token, {
+      httpOnly: true, 
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    });
+    
+    // Return user info without token
+    res.json({ isAdmin: user.isAdmin });
   } catch (error) {
     next(error);
   }
+});
+
+// User logout
+router.post('/logout', (req, res) => {
+  res.clearCookie('auth_token');
+  res.json({ message: 'Logged out successfully' });
 });
 
 module.exports = router;
