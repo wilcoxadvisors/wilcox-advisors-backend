@@ -71,14 +71,32 @@ router.post('/journal-entry', auth, async (req, res, next) => {
         try {
           account = await Account.findOne({ accountNumber: accountNo });
           if (!account) {
+            // Determine account type based on first digit of account number
+            const accountType = accountNo.startsWith('1') ? 'Asset' : 
+                              accountNo.startsWith('2') ? 'Liability' : 
+                              accountNo.startsWith('3') ? 'Equity' : 
+                              accountNo.startsWith('4') ? 'Revenue' : 'Expense';
+            
+            // Determine subledger type based on account number
+            let subledgerType = 'GL'; // Default to General Ledger
+            if (accountNo === '2000') {
+              subledgerType = 'AP';
+            } else if (accountNo === '1110') {
+              subledgerType = 'AR';
+            } else if (accountNo.startsWith('60')) {
+              subledgerType = 'Payroll';
+            } else if (accountNo.startsWith('12')) {
+              subledgerType = 'Inventory';
+            } else if (accountNo.startsWith('15')) {
+              subledgerType = 'Assets';
+            } // Add more mappings as needed
+            
             account = new Account({
               clientId: req.user.id,
               accountNumber: accountNo,
               accountName: accountTitle,
-              accountType: accountNo.startsWith('1') ? 'Asset' : 
-                          accountNo.startsWith('2') ? 'Liability' : 
-                          accountNo.startsWith('3') ? 'Equity' : 
-                          accountNo.startsWith('4') ? 'Revenue' : 'Expense',
+              accountType,
+              subledgerType,
               isManual: true
             });
             await account.save();
