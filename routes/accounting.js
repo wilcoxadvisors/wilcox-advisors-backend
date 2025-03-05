@@ -372,4 +372,23 @@ router.delete('/journal-entries/:id', auth, async (req, res, next) => {
   }
 });
 
+// Get Accounts
+router.get('/accounts', auth, async (req, res, next) => {
+  try {
+    const accounts = await Account.find({ clientId: req.user.id }).sort({ accountNumber: 1 });
+    
+    res.json({
+      accounts: accounts.map(account => ({
+        id: account._id,
+        accountNumber: account.accountNumber,
+        accountName: account.accountName,
+        accountType: account.accountType,
+        subledgerType: account.subledgerType
+      }))
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;
