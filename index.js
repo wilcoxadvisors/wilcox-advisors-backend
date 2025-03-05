@@ -6,6 +6,7 @@ const connectDB = require('./config/database');
 const routes = require('./routes');
 const errorHandler = require('./middleware/errorHandler');
 const logger = require('./utils/logger');
+const cookieParser = require('cookie-parser');
 
 // Load environment variables
 dotenv.config();
@@ -17,9 +18,11 @@ const app = express();
 app.use(cors({
   origin: process.env.CORS_ORIGIN || 'https://vocal-daffodil-cc98bd.netlify.app',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type'],
+  credentials: true
 }));
 app.use(express.json());
+app.use(cookieParser());
 
 // Connect to MongoDB
 connectDB();
