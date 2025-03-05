@@ -1,18 +1,53 @@
 const express = require('express');
+const { body, validationResult } = require('express-validator');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const User = require('../models/user');
 
-// User signup
-router.post('/signup', async (req, res, next) => {
+// Signup validation middleware
+const signupValidation = [
+  body('email')
+    .isEmail()
+    .withMessage('Please provide a valid email address')
+    .normalizeEmail()
+    .custom(async (email) => {
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        throw new Error('Email is already in use');
+      }
+      return true;
+    }),
+  body('password')
+    .isLength({ min: 6 })
+    .withMessage('Password must be at least 6 characters long')
+    .matches(/\d/)
+    .withMessage('Password must contain at least one number')
+];
+
+// Login validation middleware
+const loginValidation = [
+  body('email')
+    .isEmail()
+    .withMessage('Please provide a valid email address')
+    .normalizeEmail(),
+  body('password')
+    .isLength({ min: 1 })
+    .withMessage('Password is required')
+];
+
+// User signup with validation
+router.post('/signup', signupValidation, async (req, res, next) => {
+  // Check for validation errors
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ 
+      message: 'Validation failed', 
+      errors: errors.array() 
+    });
+  }
+
   const { email, password } = req.body;
   try {
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' });
-    }
-
     // Create new user - password will be hashed by the pre-save hook
     const user = new User({ email, password });
     await user.save();
@@ -34,8 +69,17 @@ router.post('/signup', async (req, res, next) => {
   }
 });
 
-// User login
-router.post('/login', async (req, res, next) => {
+// User login with validation
+router.post('/login', loginValidation, async (req, res, next) => {
+  // Check for validation errors
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ 
+      message: 'Validation failed', 
+      errors: errors.array() 
+    });
+  }
+
   const { email, password } = req.body;
   try {
     // Find user by email
