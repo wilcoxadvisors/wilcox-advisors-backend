@@ -1,4 +1,5 @@
 const express = require('express');
+const { body, param, query, validationResult } = require('express-validator');
 const router = express.Router();
 const JournalEntry = require('../models/journalEntry');
 const Account = require('../models/account');
@@ -6,106 +7,119 @@ const AuditLog = require('../models/auditLog');
 const File = require('../models/file');
 const { auth } = require('../middleware/auth');
 
+// Journal entry validation middleware
+const journalEntryValidation = [
+  body('date')
+    .isDate()
+    .withMessage('Valid date is required'),
+  body('description')
+    .notEmpty()
+    .withMessage('Description is required')
+    .trim(),
+  body('entries')
+    .isArray({ min: 1 })
+    .withMessage('At least one entry is required'),
+  body('entries.*.accountNo')
+    .notEmpty()
+    .withMessage('Account number is required'),
+  body('entries.*.accountTitle')
+    .notEmpty()
+    .withMessage('Account title is required'),
+  body('entries.*.amount')
+    .isFloat({ gt: 0 })
+    .withMessage('Amount must be greater than zero'),
+  body('entries.*.isDebit')
+    .isBoolean()
+    .withMessage('Debit indicator must be true or false')
+];
+
+// Get journal entries validation
+const getJournalEntriesValidation = [
+  query('startDate')
+    .optional()
+    .isDate()
+    .withMessage('Start date must be a valid date'),
+  query('endDate')
+    .optional()
+    .isDate()
+    .withMessage('End date must be a valid date'),
+  query('accountNo')
+    .optional()
+    .isString()
+    .withMessage('Account number must be a string'),
+  query('limit')
+    .optional()
+    .isInt({ min: 1, max: 100 })
+    .withMessage('Limit must be between 1 and 100'),
+  query('page')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('Page must be a positive integer')
+];
+
+// Delete journal entry validation
+const deleteJournalEntryValidation = [
+  param('id')
+    .isMongoId()
+    .withMessage('Invalid journal entry ID format')
+];
+
 // Manual Journal Entry Route (Multiple Entries with Supporting Docs)
-router.post('/journal-entry', auth, async (req, res, next) => {
+router.post('/journal-entry', auth, journalEntryValidation, async (req, res, next) => {
+  // Check for validation errors
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ 
+      message: 'Validation failed', 
+      errors: errors.array() 
+    });
+  }
+
   const { date, transactionNo, description, entries, supportingDocs } = req.body;
+  
   try {
-    // Validate header fields with specific errors
-    const headerErrors = {};
-    if (!date) headerErrors.date = 'Date is required';
-    if (!description) headerErrors.description = 'Description is required';
-    if (Object.keys(headerErrors).length > 0) {
-      return res.status(400).json({ 
-        message: 'Journal entry header validation failed', 
-        errors: headerErrors 
-      });
-    }
-
-    // Validate entries
-    if (!Array.isArray(entries)) {
-      return res.status(400).json({ 
-        message: 'Invalid entries format', 
-        errors: { entries: 'Entries must be an array' } 
-      });
-    }
-    
-    if (entries.length < 1) {
-      return res.status(400).json({ 
-        message: 'No entries provided', 
-        errors: { entries: 'At least one journal entry is required' } 
-      });
-    }
-
+    // Calculate debits and credits
     let debitTotal = 0;
     let creditTotal = 0;
     const journalEntryDocs = [];
-    const entryErrors = {};
 
     // Process each entry
-    for (let i = 0; i < entries.length; i++) {
-      const entry = entries[i];
-      const { accountNo, accountTitle, amount, isDebit, lineNo, vendor, documentNo, department, project, description: entryDescription } = entry;
-      const lineErrors = {};
-
-      // Validate entry fields with specific errors
-      if (!accountNo) lineErrors.accountNo = 'Account number is required';
-      if (!accountTitle) lineErrors.accountTitle = 'Account title is required';
-      
-      if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
-        lineErrors.amount = 'Valid positive amount is required';
-      }
-      
-      if (typeof isDebit !== 'boolean') {
-        lineErrors.isDebit = 'Entry must be specified as debit or credit';
-      }
-
-      // If any validation errors in this line, add to entryErrors
-      if (Object.keys(lineErrors).length > 0) {
-        entryErrors[`line${i + 1}`] = lineErrors;
-        continue; // Skip processing this line but continue with others to collect all errors
-      }
+    for (const entry of entries) {
+      const { accountNo, accountTitle, amount, isDebit } = entry;
 
       try {
-        // Find or create account with better error handling
-        let account;
-        try {
-          account = await Account.findOne({ accountNumber: accountNo });
-          if (!account) {
-            // Determine account type based on first digit of account number
-            const accountType = accountNo.startsWith('1') ? 'Asset' : 
-                              accountNo.startsWith('2') ? 'Liability' : 
-                              accountNo.startsWith('3') ? 'Equity' : 
-                              accountNo.startsWith('4') ? 'Revenue' : 'Expense';
-            
-            // Determine subledger type based on account number
-            let subledgerType = 'GL'; // Default to General Ledger
-            if (accountNo === '2000') {
-              subledgerType = 'AP';
-            } else if (accountNo === '1110') {
-              subledgerType = 'AR';
-            } else if (accountNo.startsWith('60')) {
-              subledgerType = 'Payroll';
-            } else if (accountNo.startsWith('12')) {
-              subledgerType = 'Inventory';
-            } else if (accountNo.startsWith('15')) {
-              subledgerType = 'Assets';
-            } // Add more mappings as needed
-            
-            account = new Account({
-              clientId: req.user.id,
-              accountNumber: accountNo,
-              accountName: accountTitle,
-              accountType,
-              subledgerType,
-              isManual: true
-            });
-            await account.save();
+        // Find or create account
+        let account = await Account.findOne({ accountNumber: accountNo });
+        if (!account) {
+          // Determine account type based on first digit of account number
+          const accountType = accountNo.startsWith('1') ? 'Asset' : 
+                            accountNo.startsWith('2') ? 'Liability' : 
+                            accountNo.startsWith('3') ? 'Equity' : 
+                            accountNo.startsWith('4') ? 'Revenue' : 'Expense';
+          
+          // Determine subledger type based on account number
+          let subledgerType = 'GL'; // Default to General Ledger
+          if (accountNo === '2000') {
+            subledgerType = 'AP';
+          } else if (accountNo === '1110') {
+            subledgerType = 'AR';
+          } else if (accountNo.startsWith('60')) {
+            subledgerType = 'Payroll';
+          } else if (accountNo.startsWith('12')) {
+            subledgerType = 'Inventory';
+          } else if (accountNo.startsWith('15')) {
+            subledgerType = 'Assets';
           }
-        } catch (accountError) {
-          entryErrors[`line${i + 1}`] = { 
-            account: `Account creation failed: ${accountError.message}` 
-          };
-          continue;
+          
+          account = new Account({
+            clientId: req.user.id,
+            accountNumber: accountNo,
+            accountName: accountTitle,
+            accountType,
+            subledgerType,
+            isManual: true
+          });
+          await account.save();
         }
 
         // Calculate totals
@@ -116,64 +130,48 @@ router.post('/journal-entry', auth, async (req, res, next) => {
           creditTotal += amountValue;
         }
 
-        // Create journal entry document with error handling
-        try {
-          const journalEntry = new JournalEntry({
-            clientId: req.user.id,
-            date: new Date(date),
-            transactionNo,
-            description: entryDescription || description,
-            debitAccount: isDebit ? account._id : null,
-            creditAccount: !isDebit ? account._id : null,
-            amount: amountValue,
-            createdBy: req.user.id,
-            subledgerType: account.subledgerType || 'GL',
-            journalType: 'Manual',
-            isManual: true,
-            lineNo,
-            vendor,
-            documentNo,
-            department,
-            project
-          });
-          await journalEntry.save();
-          journalEntryDocs.push(journalEntry);
-        } catch (journalError) {
-          entryErrors[`line${i + 1}`] = { 
-            save: `Failed to save entry: ${journalError.message}` 
-          };
-        }
-      } catch (lineProcessError) {
-        entryErrors[`line${i + 1}`] = { 
-          processing: `Error processing line: ${lineProcessError.message}` 
-        };
+        // Create journal entry document
+        const journalEntry = new JournalEntry({
+          clientId: req.user.id,
+          date: new Date(date),
+          transactionNo,
+          description: entry.description || description,
+          debitAccount: isDebit ? account._id : null,
+          creditAccount: !isDebit ? account._id : null,
+          amount: amountValue,
+          createdBy: req.user.id,
+          subledgerType: account.subledgerType || 'GL',
+          journalType: 'Manual',
+          isManual: true,
+          lineNo: entry.lineNo,
+          vendor: entry.vendor,
+          documentNo: entry.documentNo,
+          department: entry.department,
+          project: entry.project
+        });
+        await journalEntry.save();
+        journalEntryDocs.push(journalEntry);
+      } catch (error) {
+        return res.status(400).json({
+          message: `Error processing entry for account ${accountNo}`,
+          error: error.message
+        });
       }
     }
 
-    // If any entry errors occurred, return them
-    if (Object.keys(entryErrors).length > 0) {
-      return res.status(400).json({ 
-        message: 'Journal entry line validation failed', 
-        errors: entryErrors 
-      });
-    }
-
     // Validate balance with precision handling (fix floating point issues)
-    const debitFixed = debitTotal.toFixed(2);
-    const creditFixed = creditTotal.toFixed(2);
-    
-    if (debitFixed !== creditFixed) {
+    if (Math.abs(debitTotal - creditTotal) > 0.001) {
       return res.status(400).json({ 
         message: 'Journal entries are not balanced', 
         errors: { 
           balance: 'Debits must equal credits',
-          debitTotal: debitFixed,
-          creditTotal: creditFixed
+          debitTotal: debitTotal.toFixed(2),
+          creditTotal: creditTotal.toFixed(2)
         } 
       });
     }
 
-    // Handle supporting documents with better error handling
+    // Handle supporting documents
     const documentRefs = [];
     const documentErrors = [];
     
@@ -192,7 +190,7 @@ router.post('/journal-entry', auth, async (req, res, next) => {
       }
     }
 
-    // Log to AuditLog with error handling
+    // Log to AuditLog
     try {
       const auditLog = new AuditLog({
         clientId: req.user.id,
@@ -234,7 +232,16 @@ router.post('/journal-entry', auth, async (req, res, next) => {
 });
 
 // Get Journal Entries
-router.get('/journal-entries', auth, async (req, res, next) => {
+router.get('/journal-entries', auth, getJournalEntriesValidation, async (req, res, next) => {
+  // Check for validation errors
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ 
+      message: 'Validation failed', 
+      errors: errors.array() 
+    });
+  }
+  
   try {
     const { startDate, endDate, accountNo, limit = 50, page = 1 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -320,7 +327,16 @@ router.get('/journal-entries', auth, async (req, res, next) => {
 });
 
 // Delete Journal Entry (with appropriate permissions)
-router.delete('/journal-entries/:id', auth, async (req, res, next) => {
+router.delete('/journal-entries/:id', auth, deleteJournalEntryValidation, async (req, res, next) => {
+  // Check for validation errors
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ 
+      message: 'Validation failed', 
+      errors: errors.array() 
+    });
+  }
+  
   try {
     const journalEntryId = req.params.id;
     
@@ -372,10 +388,42 @@ router.delete('/journal-entries/:id', auth, async (req, res, next) => {
   }
 });
 
+// Get Accounts validation
+const getAccountsValidation = [
+  query('type')
+    .optional()
+    .isString()
+    .withMessage('Account type must be a string'),
+  query('subledger')
+    .optional()
+    .isString()
+    .withMessage('Subledger type must be a string')
+];
+
 // Get Accounts
-router.get('/accounts', auth, async (req, res, next) => {
+router.get('/accounts', auth, getAccountsValidation, async (req, res, next) => {
+  // Check for validation errors
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ 
+      message: 'Validation failed', 
+      errors: errors.array() 
+    });
+  }
+  
   try {
-    const accounts = await Account.find({ clientId: req.user.id }).sort({ accountNumber: 1 });
+    const { type, subledger } = req.query;
+    const query = { clientId: req.user.id };
+    
+    if (type) {
+      query.accountType = type;
+    }
+    
+    if (subledger) {
+      query.subledgerType = subledger;
+    }
+    
+    const accounts = await Account.find(query).sort({ accountNumber: 1 });
     
     res.json({
       accounts: accounts.map(account => ({
