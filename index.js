@@ -12,14 +12,14 @@ const logger = require('./utils/logger');
 // Load environment variables
 dotenv.config();
 
-// Connect to MongoDB (called once)
+// Connect to MongoDB
 connectDB();
 
 // Create Express app
 const app = express();
 
 // Middleware setup
-app.use(express.json()); // Parse JSON bodies first
+app.use(express.json());
 app.use(cookieParser());
 app.use(cors({
   origin: process.env.CORS_ORIGIN,
@@ -45,26 +45,26 @@ app.get('/api/csrf-token', csrfProtection, (req, res) => {
 // Serve static files
 app.use('/pdfs', express.static(path.join(__dirname, 'public', 'pdfs')));
 
-// API Routes with selective CSRF protection
-app.use('/api', routes);
-
-// Protected routes
+// Explicitly protect sensitive routes with CSRF middleware
 app.use('/api/login', csrfProtection);
 app.use('/api/signup', csrfProtection);
 app.use('/api/contact', csrfProtection);
 app.use('/api/consultation', csrfProtection);
 app.use('/api/accounting/journal-entry', csrfProtection);
 
+// API Routes
+app.use('/api', routes);
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date() });
 });
 
-// Error handling middleware (should be last)
+// Error handling middleware (always last)
 app.use(errorHandler);
 
 // Start server
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  logger.info(`Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
