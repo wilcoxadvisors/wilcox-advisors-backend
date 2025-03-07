@@ -18,7 +18,7 @@ connectDB();
 // Create Express app
 const app = express();
 
-// Middleware
+// Middleware setup
 app.use(cors({
   origin: process.env.CORS_ORIGIN,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -28,7 +28,8 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
-// CSRF protection middleware setup
+// CSRF protection setup
+const csrf = require('csurf');
 const csrfProtection = csrf({ 
   cookie: {
     httpOnly: true,
@@ -53,7 +54,7 @@ app.use('/api/accounting/journal-entry', csrfProtection);
 app.use('/pdfs', express.static(path.join(__dirname, 'public', 'pdfs')));
 
 // API Routes
-app.use('/api', require('./routes'));
+app.use('/api', routes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -61,7 +62,7 @@ app.get('/health', (req, res) => {
 });
 
 // Error handling middleware
-const errorHandler = require('./middleware/errorHandler');
+const errorHandler = require('./middleware/errorHandler'); // <-- ensure this is declared only ONCE
 app.use(errorHandler);
 
 // Start server
