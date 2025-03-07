@@ -4,6 +4,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const User = require('../models/user');
 
+// Signup validation middleware
 const signupValidation = [
   body('email')
     .isEmail()
@@ -23,57 +24,74 @@ const signupValidation = [
     .withMessage('Password must contain at least one number')
 ];
 
+// Login validation middleware
 const loginValidation = [
-  body('email').isEmail().normalizeEmail(),
-  body('password').isLength({ min: 1 })
+  body('email')
+    .isEmail()
+    .withMessage('Please provide a valid email address')
+    .normalizeEmail(),
+  body('password')
+    .isLength({ min: 1 })
+    .withMessage('Password is required')
 ];
 
+// User signup with validation
 router.post('/signup', signupValidation, async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
+    return res.status(400).json({ 
+      message: 'Validation failed', 
+      errors: errors.array() 
+    });
   }
+
   const { email, password } = req.body;
+
   try {
     const user = new User({ email, password });
     await user.save();
+
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '24h' });
+
     res.cookie('auth_token', token, {
       httpOnly: true, 
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 24 * 60 * 60 * 1000
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
     });
+
     res.status(201).json({ isAdmin: user.isAdmin });
   } catch (error) {
     next(error);
   }
-};
+});
 
-router.post('/signup', signupValidation, async (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ message: 'Validation failed', errors: errors.array() });
-  }
-  next();
-}, signupValidation);
-
+// User login with validation
 router.post('/login', loginValidation, async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({ message: 'Validation failed', errors: errors.array() });
+    return res.status(400).json({ 
+      message: 'Validation failed', 
+      errors: errors.array() 
+    });
   }
 
   const { email, password } = req.body;
+
   try {
     const user = await User.findOne({ email });
-    if (!user || !(await user.comparePassword(password))) {
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
     const token = jwt.sign(
-      { id: user._id, isAdmin: user.isAdmin },
-      process.env.JWT_SECRET,
+      { id: user._id, isAdmin: user.isAdmin }, 
+      process.env.JWT_SECRET, 
       { expiresIn: '24h' }
     );
 
@@ -81,16 +99,17 @@ router.post('/login', loginValidation, async (req, res, next) => {
       httpOnly: true, 
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 24 * 60 * 60 * 1000
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
     });
 
-    // Return the token explicitly for frontend
     res.json({ token, isAdmin: user.isAdmin });
+
   } catch (error) {
     next(error);
   }
 });
 
+// User logout
 router.post('/logout', (req, res) => {
   res.clearCookie('auth_token');
   res.json({ message: 'Logged out successfully' });
