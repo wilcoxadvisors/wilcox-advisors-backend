@@ -19,7 +19,7 @@ const app = express();
 app.use(cors({
   origin: process.env.CORS_ORIGIN,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'X-CSRF-Token'],
+  allowedHeaders: ['Content-Type', 'X-CSRF-Token', 'Authorization'],
   credentials: true
 }));
 app.use(express.json());
@@ -34,17 +34,17 @@ const csrfProtection = csrf({
   }
 });
 
+// CSRF token endpoint
+app.get('/api/csrf-token', csrfProtection, (req, res) => {
+  res.json({ csrfToken: req.csrfToken() });
+});
+
 // Apply CSRF protection to routes that need it
 app.use('/api/login', csrfProtection);
 app.use('/api/signup', csrfProtection);
 app.use('/api/contact', csrfProtection);
 app.use('/api/consultation', csrfProtection);
 app.use('/api/accounting/journal-entry', csrfProtection);
-
-// CSRF token endpoint
-app.get('/api/csrf-token', csrfProtection, (req, res) => {
-  res.json({ csrfToken: req.csrfToken() });
-});
 
 // Connect to MongoDB
 connectDB();
