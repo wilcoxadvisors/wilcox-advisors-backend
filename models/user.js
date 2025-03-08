@@ -80,10 +80,27 @@ UserSchema.pre('save', async function(next) {
  */
 UserSchema.methods.comparePassword = async function(candidatePassword) {
   try {
+    // Check if candidate password is provided
+    if (!candidatePassword) {
+      throw new Error('Password is required for comparison');
+    }
+
+    // Check if this.password exists
+    if (!this.password) {
+      // We need to fetch the password from the database since it might not be included
+      const user = await mongoose.model('User').findById(this._id).select('+password');
+      if (!user || !user.password) {
+        throw new Error('User password not found in database');
+      }
+      // Use bcrypt to compare the provided password with the stored hash
+      return await bcrypt.compare(candidatePassword, user.password);
+    }
+    
     // Use bcrypt to compare the provided password with the stored hash
     return await bcrypt.compare(candidatePassword, this.password);
   } catch (error) {
-    throw new Error(error);
+    console.error('Password comparison error:', error);
+    throw error;
   }
 };
 
