@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const path = require('path');
 const authRoutes = require('./routes/auth');
+const blogRoutes = require('./routes/blog');
 const fs = require('fs');
 
 // Load env vars
@@ -38,6 +39,7 @@ app.get('/health', (req, res) => {
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/blog', blogRoutes);
 
 // Simple error handler
 app.use((err, req, res, next) => {
