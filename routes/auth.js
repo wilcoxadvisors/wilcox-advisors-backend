@@ -35,8 +35,16 @@ router.post('/login', [
 
     const { email, password } = req.body;
 
-    // Find user by email
-    const user = await User.findOne({ email });
+    // Check if email and password are provided
+    if (!email || !password) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Please provide email and password'
+      });
+    }
+
+    // Find user by email, explicitly include password
+    const user = await User.findOne({ email }).select('+password');
     
     // If user doesn't exist
     if (!user) {
@@ -47,39 +55,62 @@ router.post('/login', [
       });
     }
 
-    // Check if password matches
-    const isMatch = await user.comparePassword(password);
-    
-    if (!isMatch) {
-      logger.warn(`Failed login attempt for user: ${email}`);
+    // Check if account is locked
+    if (user.isLocked()) {
+      logger.warn(`Attempted login to locked account: ${email}`);
       return res.status(401).json({
         status: 'error',
-        message: 'Invalid credentials'
+        message: 'Account is temporarily locked. Please try again later.'
       });
     }
 
-    // Create JWT token
-    const token = jwt.sign(
-      { 
-        id: user._id, 
+    try {
+      // Check if password matches
+      const isMatch = await bcrypt.compare(password, user.password);
+      
+      if (!isMatch) {
+        // Record failed login attempt
+        await user.failedLogin();
+        
+        logger.warn(`Failed login attempt for user: ${email}`);
+        return res.status(401).json({
+          status: 'error',
+          message: 'Invalid credentials'
+        });
+      }
+
+      // Record successful login
+      await user.successfulLogin();
+      
+      // Create JWT token
+      const token = jwt.sign(
+        { 
+          id: user._id, 
+          isAdmin: user.isAdmin,
+          email: user.email
+        },
+        process.env.JWT_SECRET || 'fallback_secret_do_not_use_in_production',
+        { expiresIn: '24h' }
+      );
+
+      // Log successful login
+      logger.info(`User logged in: ${user.email} (${user._id})`);
+
+      // Return success response
+      res.status(200).json({
+        status: 'success',
+        message: 'Login successful',
+        token,
         isAdmin: user.isAdmin,
-        email: user.email
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-
-    // Log successful login
-    logger.info(`User logged in: ${user.email} (${user._id})`);
-
-    // Return success response
-    res.status(200).json({
-      status: 'success',
-      message: 'Login successful',
-      token,
-      isAdmin: user.isAdmin,
-      userId: user._id
-    });
+        userId: user._id
+      });
+    } catch (passwordError) {
+      logger.error(`Password comparison error: ${passwordError.message}`);
+      return res.status(500).json({
+        status: 'error',
+        message: 'Server error during authentication'
+      });
+    }
   } catch (error) {
     logger.error(`Login error: ${error.message}`);
     next(error);
@@ -170,143 +201,6 @@ router.post('/register', [
 });
 
 /**
- * @desc    Request password reset
- * @route   POST /api/auth/forgot-password
- * @access  Public
- */
-router.post('/forgot-password', [
-  body('email')
-    .isEmail()
-    .withMessage('Please provide a valid email address')
-    .normalizeEmail()
-], async (req, res, next) => {
-  try {
-    // Validate request
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Validation failed',
-        errors: errors.array()
-      });
-    }
-
-    const { email } = req.body;
-
-    // Find user by email
-    const user = await User.findOne({ email });
-    
-    // Don't reveal if user exists for security reasons
-    if (!user) {
-      logger.info(`Password reset requested for non-existent email: ${email}`);
-      return res.status(200).json({
-        status: 'success',
-        message: 'If your email is registered, you will receive password reset instructions'
-      });
-    }
-
-    // Generate reset token
-    const resetToken = jwt.sign(
-      { id: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: '1h' }
-    );
-
-    // Send password reset email
-    try {
-      await sendNotificationEmail({
-        from: process.env.EMAIL_USER,
-        to: email,
-        subject: 'Password Reset - Wilcox Advisors',
-        html: `
-          <h2>Password Reset Request</h2>
-          <p>You (or someone else) has requested to reset your password.</p>
-          <p>To reset your password, please contact support with this token:</p>
-          <p><strong>${resetToken}</strong></p>
-          <p>This token will expire in 1 hour.</p>
-          <p>If you did not request this, please ignore this email.</p>
-        `
-      });
-    } catch (emailError) {
-      logger.error(`Failed to send password reset email: ${emailError.message}`);
-      return res.status(500).json({
-        status: 'error',
-        message: 'Failed to send password reset email'
-      });
-    }
-
-    logger.info(`Password reset requested for: ${email}`);
-
-    // Return success response
-    res.status(200).json({
-      status: 'success',
-      message: 'If your email is registered, you will receive password reset instructions'
-    });
-  } catch (error) {
-    logger.error(`Password reset request error: ${error.message}`);
-    next(error);
-  }
-});
-
-/**
- * @desc    Reset password (admin operation only)
- * @route   POST /api/auth/reset-password
- * @access  Admin
- */
-router.post('/reset-password', [
-  body('userId')
-    .isMongoId()
-    .withMessage('Invalid user ID'),
-  body('newPassword')
-    .isLength({ min: 8 })
-    .withMessage('Password must be at least 8 characters long')
-    .matches(/^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*])/)
-    .withMessage('Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character')
-], async (req, res, next) => {
-  try {
-    // Validate request
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Validation failed',
-        errors: errors.array()
-      });
-    }
-
-    const { userId, newPassword } = req.body;
-
-    // Find user by ID
-    const user = await User.findById(userId);
-    
-    if (!user) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'User not found'
-      });
-    }
-
-    // Hash new password
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(newPassword, salt);
-
-    // Save updated user
-    await user.save();
-
-    logger.info(`Password reset for user: ${user.email} (${user._id})`);
-
-    // Return success response
-    res.status(200).json({
-      status: 'success',
-      message: 'Password reset successful'
-    });
-  } catch (error) {
-    logger.error(`Password reset error: ${error.message}`);
-    next(error);
-  }
-});
-
-/**
  * @desc    Verify JWT token
  * @route   GET /api/auth/verify
  * @access  Public
@@ -324,7 +218,7 @@ router.get('/verify', async (req, res, next) => {
 
     try {
       // Verify token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_do_not_use_in_production');
       
       // Check if user still exists
       const user = await User.findById(decoded.id).select('-password');
