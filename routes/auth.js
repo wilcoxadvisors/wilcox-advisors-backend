@@ -5,8 +5,6 @@ const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const User = require('../models/user');
-const logger = require('../utils/logger');
-const { sendNotificationEmail } = require('../utils/emailService');
 
 /**
  * @desc    Login user
@@ -48,19 +46,10 @@ router.post('/login', [
     
     // If user doesn't exist
     if (!user) {
-      logger.warn(`Login attempt with invalid email: ${email}`);
+      console.warn(`Login attempt with invalid email: ${email}`);
       return res.status(401).json({
         status: 'error',
         message: 'Invalid credentials'
-      });
-    }
-
-    // Check if account is locked
-    if (user.isLocked()) {
-      logger.warn(`Attempted login to locked account: ${email}`);
-      return res.status(401).json({
-        status: 'error',
-        message: 'Account is temporarily locked. Please try again later.'
       });
     }
 
@@ -69,24 +58,19 @@ router.post('/login', [
       const isMatch = await bcrypt.compare(password, user.password);
       
       if (!isMatch) {
-        // Record failed login attempt
-        await user.failedLogin();
-        
-        logger.warn(`Failed login attempt for user: ${email}`);
+        console.warn(`Failed login attempt for user: ${email}`);
         return res.status(401).json({
           status: 'error',
           message: 'Invalid credentials'
         });
       }
 
-      // Record successful login
-      await user.successfulLogin();
-      
       // Create JWT token
       const token = jwt.sign(
         { 
           id: user._id, 
-          isAdmin: user.isAdmin,
+          // Handle string "true" vs boolean true
+          isAdmin: user.isAdmin === true || user.isAdmin === "true",
           email: user.email
         },
         process.env.JWT_SECRET || 'fallback_secret_do_not_use_in_production',
@@ -94,25 +78,26 @@ router.post('/login', [
       );
 
       // Log successful login
-      logger.info(`User logged in: ${user.email} (${user._id})`);
+      console.info(`User logged in: ${user.email} (${user._id})`);
 
       // Return success response
       res.status(200).json({
         status: 'success',
         message: 'Login successful',
         token,
-        isAdmin: user.isAdmin,
+        // Handle string "true" vs boolean true
+        isAdmin: user.isAdmin === true || user.isAdmin === "true",
         userId: user._id
       });
     } catch (passwordError) {
-      logger.error(`Password comparison error: ${passwordError.message}`);
+      console.error(`Password comparison error: ${passwordError.message}`);
       return res.status(500).json({
         status: 'error',
         message: 'Server error during authentication'
       });
     }
   } catch (error) {
-    logger.error(`Login error: ${error.message}`);
+    console.error(`Login error: ${error.message}`);
     next(error);
   }
 });
@@ -169,24 +154,7 @@ router.post('/register', [
     // Save user to database
     await user.save();
 
-    // Send notification email
-    try {
-      await sendNotificationEmail({
-        from: process.env.EMAIL_USER,
-        to: process.env.NOTIFICATION_EMAIL,
-        subject: 'New User Registration - Wilcox Advisors',
-        html: `
-          <h2>New User Account Created</h2>
-          <p><strong>Email:</strong> ${email}</p>
-          <p><strong>Admin:</strong> ${isAdmin ? 'Yes' : 'No'}</p>
-          <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
-        `
-      });
-    } catch (emailError) {
-      logger.error(`Failed to send registration notification email: ${emailError.message}`);
-    }
-
-    logger.info(`New user registered: ${email} (${user._id})`);
+    console.info(`New user registered: ${email} (${user._id})`);
 
     // Return success response
     res.status(201).json({
@@ -195,7 +163,7 @@ router.post('/register', [
       userId: user._id
     });
   } catch (error) {
-    logger.error(`Registration error: ${error.message}`);
+    console.error(`Registration error: ${error.message}`);
     next(error);
   }
 });
@@ -237,7 +205,8 @@ router.get('/verify', async (req, res, next) => {
         user: {
           id: user._id,
           email: user.email,
-          isAdmin: user.isAdmin
+          // Handle string "true" vs boolean true
+          isAdmin: user.isAdmin === true || user.isAdmin === "true"
         }
       });
     } catch (verifyError) {
@@ -249,7 +218,7 @@ router.get('/verify', async (req, res, next) => {
       });
     }
   } catch (error) {
-    logger.error(`Token verification error: ${error.message}`);
+    console.error(`Token verification error: ${error.message}`);
     next(error);
   }
 });
