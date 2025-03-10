@@ -8,6 +8,12 @@ const TransactionSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  entityId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Entity',
+    required: true,
+    index: true
+  },
   accountId: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'Account', 
@@ -78,6 +84,35 @@ const TransactionSchema = new mongoose.Schema({
     type: String,
     index: true
   },
+  // Multi-entity and consolidation fields
+  isIntercompany: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  relatedEntityId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Entity',
+    index: true
+  },
+  eliminationReference: {
+    type: String,
+    index: true
+  },
+  currency: {
+    type: String,
+    default: 'USD'
+  },
+  exchangeRate: {
+    type: Number,
+    default: 1
+  },
+  originalAmount: {
+    type: Number
+  },
+  originalCurrency: {
+    type: String
+  },
   isReconciled: {
     type: Boolean,
     default: false,
@@ -91,6 +126,11 @@ const TransactionSchema = new mongoose.Schema({
   isManual: { 
     type: Boolean, 
     default: true 
+  },
+  consolidationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Consolidation',
+    index: true
   },
   metadata: {
     type: Object,
@@ -121,8 +161,9 @@ const TransactionSchema = new mongoose.Schema({
 });
 
 // Create compound indexes for performance
-TransactionSchema.index({ clientId: 1, date: -1 });
-TransactionSchema.index({ clientId: 1, accountId: 1, date: -1 });
-TransactionSchema.index({ clientId: 1, subledgerType: 1, date: -1 });
+TransactionSchema.index({ clientId: 1, entityId: 1, date: -1 });
+TransactionSchema.index({ clientId: 1, entityId: 1, accountId: 1, date: -1 });
+TransactionSchema.index({ clientId: 1, entityId: 1, subledgerType: 1, date: -1 });
+TransactionSchema.index({ clientId: 1, isIntercompany: 1, relatedEntityId: 1 });
 
 module.exports = mongoose.model('Transaction', TransactionSchema);
