@@ -8,6 +8,12 @@ const JournalEntrySchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  entityId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Entity',
+    required: true,
+    index: true
+  },
   entryNumber: {
     type: String,
     index: true
@@ -62,6 +68,34 @@ const JournalEntrySchema = new mongoose.Schema({
   },
   journalType: {
     type: String,
+    index: true
+  },
+  // Multi-entity and consolidation fields
+  isIntercompany: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  relatedEntityId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Entity',
+    index: true
+  },
+  eliminationReference: {
+    type: String,
+    index: true
+  },
+  currency: {
+    type: String,
+    default: 'USD'
+  },
+  exchangeRate: {
+    type: Number,
+    default: 1
+  },
+  consolidationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Consolidation',
     index: true
   },
   recurring: {
@@ -124,8 +158,10 @@ const JournalEntrySchema = new mongoose.Schema({
 });
 
 // Create compound indexes for performance
-JournalEntrySchema.index({ clientId: 1, date: -1 });
-JournalEntrySchema.index({ clientId: 1, 'period.year': 1, 'period.month': 1 });
-JournalEntrySchema.index({ clientId: 1, subledgerType: 1, date: -1 });
+JournalEntrySchema.index({ clientId: 1, entityId: 1, date: -1 });
+JournalEntrySchema.index({ clientId: 1, entityId: 1, 'period.year': 1, 'period.month': 1 });
+JournalEntrySchema.index({ clientId: 1, entityId: 1, subledgerType: 1, date: -1 });
+JournalEntrySchema.index({ clientId: 1, isIntercompany: 1, relatedEntityId: 1 });
+JournalEntrySchema.index({ consolidationId: 1 });
 
 module.exports = mongoose.model('JournalEntry', JournalEntrySchema);
