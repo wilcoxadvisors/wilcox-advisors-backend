@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const path = require('path');
 const fs = require('fs');
+const errorHandler = require('./middleware/errorHandler');
 
 // Import existing routes
 const authRoutes = require('./routes/auth');
@@ -14,7 +15,7 @@ const blogRoutes = require('./routes/blog');
 const entityRoutes = require('./routes/entities');
 const accountRoutes = require('./routes/accounts');
 const journalEntryRoutes = require('./routes/journalEntries');
-const reportRoutes = require('./routes/reports'); // Added reports routes
+const reportRoutes = require('./routes/reports');
 
 // Load env vars
 dotenv.config();
@@ -53,15 +54,10 @@ app.use('/api/blog', blogRoutes);
 app.use('/api/entities', entityRoutes);
 app.use('/api/accounts', accountRoutes);
 app.use('/api/journal-entries', journalEntryRoutes);
-app.use('/api/reports', reportRoutes); // Added reports routes
+app.use('/api/reports', reportRoutes);
 
-// Error handler
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({
-    message: err.message || 'Internal Server Error'
-  });
-});
+// Centralized error handling middleware
+app.use(errorHandler);
 
 // Start server
 const PORT = process.env.PORT || 10000;
