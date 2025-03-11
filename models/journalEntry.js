@@ -70,7 +70,6 @@ const JournalEntrySchema = new mongoose.Schema({
     type: String,
     index: true
   },
-  // Multi-entity and consolidation fields
   isIntercompany: {
     type: Boolean,
     default: false,
@@ -95,8 +94,8 @@ const JournalEntrySchema = new mongoose.Schema({
   },
   consolidationId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Consolidation',
-    index: true
+    ref: 'Consolidation'
+    // Removed index: true here to avoid duplicate
   },
   recurring: {
     isRecurring: {
@@ -130,7 +129,7 @@ const JournalEntrySchema = new mongoose.Schema({
     default: true 
   },
   metadata: {
-    type: Object,
+    type: mongoose.Schema.Types.Mixed, // Changed from Object to Mixed
     default: {}
   },
   attachments: [{
@@ -151,7 +150,7 @@ const JournalEntrySchema = new mongoose.Schema({
       type: Date,
       default: Date.now
     },
-    details: Object
+    details: mongoose.Schema.Types.Mixed // Changed from Object to Mixed
   }]
 }, {
   timestamps: true
