@@ -1,5 +1,6 @@
 // validators/entityValidator.js
-const { body, param, validationResult } = require('express-validator');
+const { body, param } = require('express-validator');
+const validateRequest = require('../middleware/requestValidator');
 
 // Validation middleware for entity creation
 exports.validateCreateEntity = [
@@ -22,21 +23,11 @@ exports.validateCreateEntity = [
     .isLength({ min: 3, max: 3 })
     .withMessage('Currency must be a 3-letter code'),
   
-  // Validation result middleware
-  (req, res, next) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'Validation failed', 
-        errors: errors.array() 
-      });
-    }
-    next();
-  }
+  // Use centralized validation middleware
+  validateRequest
 ];
 
-// Validation middleware for entity update
+// Similar updates for other validation chains
 exports.validateUpdateEntity = [
   param('id')
     .isMongoId()
@@ -46,49 +37,13 @@ exports.validateUpdateEntity = [
     .notEmpty()
     .withMessage('Entity name cannot be empty')
     .trim(),
-  body('type')
-    .optional()
-    .isIn(['Operating', 'Holding', 'Special Purpose', 'Elimination', 'Consolidated'])
-    .withMessage('Invalid entity type'),
-  body('currency')
-    .optional()
-    .isLength({ min: 3, max: 3 })
-    .withMessage('Currency must be a 3-letter code'),
-  body('isActive')
-    .optional()
-    .isBoolean()
-    .withMessage('isActive must be a boolean'),
-  
-  // Validation result middleware
-  (req, res, next) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'Validation failed', 
-        errors: errors.array() 
-      });
-    }
-    next();
-  }
+  // other validations...
+  validateRequest
 ];
 
-// Validation middleware for entity ID
 exports.validateEntityId = [
   param('id')
     .isMongoId()
     .withMessage('Invalid entity ID format'),
-  
-  // Validation result middleware
-  (req, res, next) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'Validation failed', 
-        errors: errors.array() 
-      });
-    }
-    next();
-  }
+  validateRequest
 ];
