@@ -334,3 +334,19 @@ exports.deleteAccount = async (req, res, next) => {
         accountName: account.accountName 
       }
     });
+    await auditLog.save({ session });
+    
+    await session.commitTransaction();
+    
+    res.json({
+      success: true,
+      message: 'Account deleted successfully'
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    logger.error('Error deleting account:', error);
+    next(error);
+  } finally {
+    session.endSession();
+  }
+};
