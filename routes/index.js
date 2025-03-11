@@ -12,6 +12,7 @@ const accountingRoutes = require('./accounting');
 const adminRoutes = require('./admin');
 const clientRoutes = require('./client');
 const blogRoutes = require('./blog');
+const chartOfAccountsRoutes = require('./chartOfAccounts');
 
 // Register routes
 router.use('/auth', authRoutes);
@@ -24,5 +25,6 @@ router.use('/accounting', accountingRoutes);
 router.use('/admin', adminRoutes);
 router.use('/client', clientRoutes);
 router.use('/blog', blogRoutes);
+router.use('/chart-of-accounts', chartOfAccountsRoutes);
 
 module.exports = router;
