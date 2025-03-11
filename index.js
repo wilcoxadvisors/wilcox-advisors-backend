@@ -1,12 +1,19 @@
-// index.js - Simple version without extra dependencies
+// index.js
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const path = require('path');
+const fs = require('fs');
+
+// Import existing routes
 const authRoutes = require('./routes/auth');
 const blogRoutes = require('./routes/blog');
-const fs = require('fs');
+
+// Import new accounting route modules
+const entityRoutes = require('./routes/entities');
+const accountRoutes = require('./routes/accounts');
+const journalEntryRoutes = require('./routes/journalEntries');
 
 // Load env vars
 dotenv.config();
@@ -37,11 +44,16 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Routes
+// Existing routes
 app.use('/api/auth', authRoutes);
 app.use('/api/blog', blogRoutes);
 
-// Simple error handler
+// New accounting routes
+app.use('/api/entities', entityRoutes);
+app.use('/api/accounts', accountRoutes);
+app.use('/api/journal-entries', journalEntryRoutes);
+
+// Error handler
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({
