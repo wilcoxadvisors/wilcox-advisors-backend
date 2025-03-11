@@ -10,10 +10,11 @@ const fs = require('fs');
 const authRoutes = require('./routes/auth');
 const blogRoutes = require('./routes/blog');
 
-// Import new accounting route modules
+// Import accounting route modules
 const entityRoutes = require('./routes/entities');
 const accountRoutes = require('./routes/accounts');
 const journalEntryRoutes = require('./routes/journalEntries');
+const reportRoutes = require('./routes/reports'); // Added reports routes
 
 // Load env vars
 dotenv.config();
@@ -48,10 +49,11 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/blog', blogRoutes);
 
-// New accounting routes
+// Accounting routes
 app.use('/api/entities', entityRoutes);
 app.use('/api/accounts', accountRoutes);
 app.use('/api/journal-entries', journalEntryRoutes);
+app.use('/api/reports', reportRoutes); // Added reports routes
 
 // Error handler
 app.use((err, req, res, next) => {
