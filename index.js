@@ -79,6 +79,70 @@ try {
   }
   
   try {
+    const consultationsRoutes = require('./routes/consultations');
+    app.use('/api/consultations', consultationsRoutes);
+    console.log('- consultations routes loaded');
+  } catch (err) {
+    console.error('Error loading consultations routes:', err);
+  }
+  
+  try {
+    const checklistsRoutes = require('./routes/checklists');
+    app.use('/api/checklists', checklistsRoutes);
+    console.log('- checklists routes loaded');
+  } catch (err) {
+    console.error('Error loading checklists routes:', err);
+  }
+  
+  try {
+    const contactsRoutes = require('./routes/contacts');
+    app.use('/api/contacts', contactsRoutes);
+    console.log('- contacts routes loaded');
+  } catch (err) {
+    console.error('Error loading contacts routes:', err);
+  }
+  
+  try {
+    const chatRoutes = require('./routes/chat');
+    app.use('/api/chat', chatRoutes);
+    console.log('- chat routes loaded');
+  } catch (err) {
+    console.error('Error loading chat routes:', err);
+  }
+  
+  try {
+    const filesRoutes = require('./routes/files');
+    app.use('/api/files', filesRoutes);
+    console.log('- files routes loaded');
+  } catch (err) {
+    console.error('Error loading files routes:', err);
+  }
+  
+  try {
+    const accountingRoutes = require('./routes/accounting');
+    app.use('/api/accounting', accountingRoutes);
+    console.log('- accounting routes loaded');
+  } catch (err) {
+    console.error('Error loading accounting routes:', err);
+  }
+  
+  try {
+    const adminRoutes = require('./routes/admin');
+    app.use('/api/admin', adminRoutes);
+    console.log('- admin routes loaded');
+  } catch (err) {
+    console.error('Error loading admin routes:', err);
+  }
+  
+  try {
+    const clientRoutes = require('./routes/client');
+    app.use('/api/client', clientRoutes);
+    console.log('- client routes loaded');
+  } catch (err) {
+    console.error('Error loading client routes:', err);
+  }
+  
+  try {
     const entityRoutes = require('./routes/entities');
     app.use('/api/entities', entityRoutes);
     console.log('- entity routes loaded');
