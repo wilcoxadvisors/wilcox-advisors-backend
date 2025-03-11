@@ -7,6 +7,9 @@ const path = require('path');
 const fs = require('fs');
 const errorHandler = require('./middleware/errorHandler');
 
+// Load env vars
+dotenv.config();
+
 // Import existing routes
 const authRoutes = require('./routes/auth');
 const blogRoutes = require('./routes/blog');
@@ -16,9 +19,6 @@ const entityRoutes = require('./routes/entities');
 const accountRoutes = require('./routes/accounts');
 const journalEntryRoutes = require('./routes/journalEntries');
 const reportRoutes = require('./routes/reports');
-
-// Load env vars
-dotenv.config();
 
 // Create Express app
 const app = express();
@@ -33,17 +33,23 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Serve static files
-app.use('/pdfs', express.static(path.join(__dirname, 'public', 'pdfs')));
+// Ensure PDF directory exists
+const pdfDir = path.join(__dirname, 'public', 'pdfs');
+if (!fs.existsSync(pdfDir)) {
+  fs.mkdirSync(pdfDir, { recursive: true });
+}
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('MongoDB Connected'))
-  .catch(err => console.error('MongoDB Connection Error:', err));
+// Serve static files
+app.use('/pdfs', express.static(pdfDir));
 
 // Basic health check route
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Root route for basic testing
+app.get('/', (req, res) => {
+  res.status(200).json({ message: 'Wilcox Advisors API is running' });
 });
 
 // Existing routes
@@ -59,6 +65,25 @@ app.use('/api/reports', reportRoutes);
 // Centralized error handling middleware
 app.use(errorHandler);
 
-// Start server
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// Connect to MongoDB and start server
+const startServer = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI);
+    console.log('MongoDB Connected');
+    
+    // Start server after successful DB connection
+    const PORT = process.env.PORT || 10000;
+    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  } catch (err) {
+    console.error('MongoDB Connection Error:', err);
+    
+    // Start server anyway, even without DB connection
+    const PORT = process.env.PORT || 10000;
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT} (without database connection)`);
+      console.log('Please check your MongoDB connection string and make sure MongoDB Atlas is properly configured');
+    });
+  }
+};
+
+startServer();
