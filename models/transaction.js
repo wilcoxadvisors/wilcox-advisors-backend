@@ -84,7 +84,6 @@ const TransactionSchema = new mongoose.Schema({
     type: String,
     index: true
   },
-  // Multi-entity and consolidation fields
   isIntercompany: {
     type: Boolean,
     default: false,
@@ -129,11 +128,11 @@ const TransactionSchema = new mongoose.Schema({
   },
   consolidationId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Consolidation',
-    index: true
+    ref: 'Consolidation'
+    // Removed index: true here to avoid duplicate
   },
   metadata: {
-    type: Object,
+    type: mongoose.Schema.Types.Mixed, // Changed from Object to Mixed
     default: {}
   },
   attachments: [{
@@ -154,7 +153,7 @@ const TransactionSchema = new mongoose.Schema({
       type: Date,
       default: Date.now
     },
-    details: Object
+    details: mongoose.Schema.Types.Mixed // Changed from Object to Mixed
   }]
 }, {
   timestamps: true
@@ -165,5 +164,6 @@ TransactionSchema.index({ clientId: 1, entityId: 1, date: -1 });
 TransactionSchema.index({ clientId: 1, entityId: 1, accountId: 1, date: -1 });
 TransactionSchema.index({ clientId: 1, entityId: 1, subledgerType: 1, date: -1 });
 TransactionSchema.index({ clientId: 1, isIntercompany: 1, relatedEntityId: 1 });
+TransactionSchema.index({ consolidationId: 1 });
 
 module.exports = mongoose.model('Transaction', TransactionSchema);
