@@ -1,5 +1,5 @@
 // validators/journalEntryValidator.js
-const { body, validationResult } = require('express-validator');
+const { body, param, validationResult } = require('express-validator');
 
 // Validation middleware for journal entry creation
 exports.validateJournalEntry = [
@@ -25,6 +25,26 @@ exports.validateJournalEntry = [
   body('entries.*.type')
     .isIn(['debit', 'credit'])
     .withMessage('Type must be either debit or credit'),
+    
+  // Validation result middleware
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Validation failed', 
+        errors: errors.array() 
+      });
+    }
+    next();
+  }
+];
+
+// Validation middleware for journal entry ID format
+exports.validateJournalEntryId = [
+  param('id')
+    .isMongoId()
+    .withMessage('Invalid journal entry ID format'),
     
   // Validation result middleware
   (req, res, next) => {
