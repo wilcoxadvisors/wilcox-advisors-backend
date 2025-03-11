@@ -1,12 +1,33 @@
 // routes/accounts.js
 const express = require('express');
 const router = express.Router();
-const { getAccounts, createAccount } = require('../controllers/accountController');
-const { validateAccount } = require('../validators/accountValidator');
+const { 
+  getAccounts, 
+  getAccountById, 
+  createAccount, 
+  updateAccount,
+  deleteAccount 
+} = require('../controllers/accountController');
+const { 
+  validateCreateAccount, 
+  validateUpdateAccount,
+  validateAccountId 
+} = require('../validators/accountValidator');
 const { auth } = require('../middleware/auth');
 
-// Routes with middleware
+// Get all accounts
 router.get('/', auth, getAccounts);
-router.post('/', auth, validateAccount, createAccount);
+
+// Get account by ID
+router.get('/:id', auth, validateAccountId, getAccountById);
+
+// Create new account
+router.post('/', auth, validateCreateAccount, createAccount);
+
+// Update account
+router.put('/:id', auth, validateUpdateAccount, updateAccount);
+
+// Delete account
+router.delete('/:id', auth, validateAccountId, deleteAccount);
 
 module.exports = router;
