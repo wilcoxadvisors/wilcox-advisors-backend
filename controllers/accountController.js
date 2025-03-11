@@ -334,4 +334,3 @@ exports.deleteAccount = async (req, res, next) => {
         accountName: account.accountName 
       }
     });
-    a
